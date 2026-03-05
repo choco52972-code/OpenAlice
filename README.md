@@ -17,10 +17,9 @@ Your one-person Wall Street. Alice is an AI trading agent that gives you your ow
 ## Features
 
 - **Dual AI provider** — switch between Claude Code CLI and Vercel AI SDK at runtime, no restart needed
-- **Crypto trading** — CCXT-based execution (Bybit, OKX, Binance, etc.) with a git-like wallet (stage, commit, push)
-- **Securities trading** — Alpaca integration for US equities with the same wallet workflow
-- **Guard pipeline** — extensible pre-execution safety checks for both crypto and securities (max position size, max leverage, cooldown between trades)
-- **Market data** — OpenBB-powered equity, crypto, commodity, and currency data layers with symbol search and technical indicator calculator
+- **Unified trading** — multi-account architecture supporting CCXT (Bybit, OKX, Binance, etc.) and Alpaca (US equities) with a git-like workflow (stage, commit, push)
+- **Guard pipeline** — extensible pre-execution safety checks (max position size, cooldown between trades, symbol whitelist)
+- **Market data** — OpenBB-powered equity, crypto, commodity, and currency data layers with unified symbol search (`marketSearchForResearch`) and technical indicator calculator
 - **Equity research** — company profiles, financial statements, ratios, analyst estimates, earnings calendar, insider trading, and market movers (top gainers, losers, most active)
 - **News collector** — background RSS collection from configurable feeds with archive search tools (`globNews`/`grepNews`/`readNews`). Also captures OpenBB news API results via piggyback
 - **Cognitive state** — persistent "brain" with frontal lobe memory, emotion tracking, and commit history
@@ -34,11 +33,11 @@ Your one-person Wall Street. Alice is an AI trading agent that gives you your ow
 
 **Provider** — The AI backend that powers Alice. Claude Code (subprocess) or Vercel AI SDK (in-process). Switchable at runtime via `ai-provider.json`.
 
-**Extension** — A self-contained tool package registered in ToolCenter. Each extension owns its tools, state, and persistence. Examples: crypto-trading, brain, analysis-kit.
+**Extension** — A self-contained tool package registered in ToolCenter. Each extension owns its tools, state, and persistence. Examples: trading, brain, analysis-kit.
 
-**Wallet** — A git-like workflow for trading operations. You stage orders, commit with a message, then push to execute. Every commit gets an 8-char hash. Full history is reviewable via `walletLog` / `walletShow`.
+**Trading** — A git-like workflow for trading operations. You stage orders, commit with a message, then push to execute. Every commit gets an 8-char hash. Full history is reviewable via `tradingLog` / `tradingShow`.
 
-**Guard** — A pre-execution check that runs before every trading operation reaches the exchange. Guards enforce limits (max position size, max leverage, cooldown between trades) and can be configured per-asset.
+**Guard** — A pre-execution check that runs before every trading operation reaches the exchange. Guards enforce limits (max position size, cooldown between trades, symbol whitelist) and can be configured per-asset.
 
 **Connector** — An external interface through which users interact with Alice. Built-in: Web UI, Telegram, MCP Ask. Connectors register with the ConnectorRegistry; delivery always goes to the channel of last interaction.
 
@@ -72,8 +71,7 @@ graph LR
   subgraph Extensions
     OBB[OpenBB Data]
     AK[Analysis Kit]
-    CT[Crypto Trading]
-    ST[Securities Trading]
+    TR[Trading]
     GD[Guards]
     NC[News Collector]
     BR[Brain]
@@ -102,10 +100,8 @@ graph LR
   OBB --> AK
   OBB --> NC
   AK --> TC
-  CT --> TC
-  ST --> TC
-  GD --> CT
-  GD --> ST
+  TR --> TC
+  GD --> TR
   NC --> TC
   BR --> TC
   BW --> TC
@@ -124,7 +120,7 @@ graph LR
 
 **Core** — `Engine` is a thin facade that delegates to `AgentCenter`, which routes all calls (both stateless and session-aware) through `ProviderRouter`. `ToolCenter` is a centralized tool registry — extensions register tools there, and it exports them in Vercel AI SDK and MCP formats. `EventLog` provides persistent append-only event storage (JSONL) with real-time subscriptions and crash recovery. `ConnectorRegistry` tracks which channel the user last spoke through.
 
-**Extensions** — domain-specific tool sets registered in `ToolCenter`. Each extension owns its tools, state, and persistence. `Guards` enforce pre-execution safety checks (position size limits, leverage caps, trade cooldowns) on both crypto and securities operations. `NewsCollector` runs background RSS fetches and piggybacks OpenBB news calls into a persistent archive searchable by the agent.
+**Extensions** — domain-specific tool sets registered in `ToolCenter`. Each extension owns its tools, state, and persistence. `Guards` enforce pre-execution safety checks (position size limits, trade cooldowns, symbol whitelist) on all trading operations. `NewsCollector` runs background RSS fetches and piggybacks OpenBB news calls into a persistent archive searchable by the agent.
 
 **Tasks** — scheduled background work. `CronEngine` manages jobs and fires `cron.fire` events into the EventLog on schedule; a listener picks them up, runs them through the AI engine, and delivers replies via the ConnectorRegistry. `Heartbeat` is a periodic health-check that uses a structured response protocol (HEARTBEAT_OK / CHAT_NO / CHAT_YES).
 
@@ -158,9 +154,7 @@ All config lives in `data/config/` as JSON files with Zod validation. Missing fi
 
 **AI Provider** — The default provider is Claude Code (`claude -p` subprocess). To use the [Vercel AI SDK](https://sdk.vercel.ai/docs) instead (Anthropic, OpenAI, Google, etc.), switch `ai-provider.json` to `vercel-ai-sdk` and add your API key to `api-keys.json`.
 
-**Crypto Trading** — Powered by [CCXT](https://docs.ccxt.com/). Configure exchange and API keys in `crypto.json`. Any CCXT-supported exchange works (Bybit, OKX, Binance, etc.).
-
-**Securities Trading** — Powered by [Alpaca](https://alpaca.markets/). Configure broker and API keys in `securities.json`. Supports paper and live trading.
+**Trading** — Multi-account architecture. Crypto via [CCXT](https://docs.ccxt.com/) (Bybit, OKX, Binance, etc.) configured in `crypto.json`. US equities via [Alpaca](https://alpaca.markets/) configured in `securities.json`. Both use the same git-like trading workflow.
 
 | File | Purpose |
 |------|---------|
@@ -169,8 +163,8 @@ All config lives in `data/config/` as JSON files with Zod validation. Missing fi
 | `agent.json` | Max agent steps, evolution mode toggle, Claude Code tool permissions |
 | `ai-provider.json` | Active AI provider (`vercel-ai-sdk` or `claude-code`), switchable at runtime |
 | `api-keys.json` | AI provider API keys (Anthropic, OpenAI, Google) — only needed for Vercel AI SDK mode |
-| `crypto.json` | Allowed symbols, CCXT exchange config + API keys, demo trading flag, guards |
-| `securities.json` | Allowed symbols, Alpaca broker config + API keys, paper trading flag, guards |
+| `crypto.json` | CCXT exchange config + API keys, allowed symbols, guards |
+| `securities.json` | Alpaca broker config + API keys, allowed symbols, guards |
 | `connectors.json` | Web/MCP server ports, Telegram bot credentials + enable, MCP Ask enable |
 | `openbb.json` | OpenBB API URL, per-asset-class data providers, provider API keys |
 | `news-collector.json` | RSS feeds, fetch interval, retention period, OpenBB piggyback toggle |
@@ -209,13 +203,11 @@ src/
     vercel-ai-sdk/           # Vercel AI SDK ToolLoopAgent wrapper
   extension/
     analysis-kit/            # Indicator calculator and market data tools
-    equity/                  # Equity search, fundamentals, and data adapter
-    crypto/                  # Crypto search and data adapter
-    currency/                # Currency search and data adapter
+    equity/                  # Equity fundamentals and data adapter
+    market/                  # Unified symbol search across equity, crypto, currency
     news/                    # OpenBB news tools (world + company headlines)
     news-collector/          # RSS collector, piggyback wrapper, archive search tools
-    crypto-trading/          # CCXT integration, wallet, guard pipeline, tools
-    securities-trading/      # Alpaca integration, wallet, guard pipeline, tools
+    trading/                 # Unified multi-account trading (CCXT + Alpaca), guard pipeline, git-like commit history
     thinking-kit/            # Reasoning and calculation tools
     brain/                   # Cognitive state (memory, emotion)
     browser/                 # Browser automation bridge (via OpenClaw)
@@ -244,8 +236,7 @@ data/
   sessions/                  # JSONL conversation histories
   brain/                     # Agent memory and emotion logs
   cache/                     # API response caches
-  crypto-trading/            # Crypto wallet commit history
-  securities-trading/        # Securities wallet commit history
+  trading/                   # Trading commit history (per-account)
   news-collector/            # Persistent news archive (JSONL)
   cron/                      # Cron job definitions (jobs.json)
   event-log/                 # Persistent event log (events.jsonl)
@@ -258,4 +249,4 @@ docs/                        # Architecture documentation
 
 ## License
 
-[MIT](LICENSE)
+[AGPL-3.0](LICENSE)

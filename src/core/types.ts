@@ -1,5 +1,5 @@
-import type { ICryptoTradingEngine, Wallet } from '../extension/crypto-trading/index.js'
-import type { ISecuritiesTradingEngine, SecWallet } from '../extension/securities-trading/index.js'
+import type { AccountManager } from '../extension/trading/index.js'
+import type { ITradingGit } from '../extension/trading/git/interfaces.js'
 import type { CronEngine } from '../task/cron/engine.js'
 import type { Heartbeat } from '../task/heartbeat/index.js'
 import type { Config } from './config.js'
@@ -25,24 +25,20 @@ export interface ReconnectResult {
 export interface EngineContext {
   config: Config
   connectorCenter: ConnectorCenter
-  cryptoEngine: ICryptoTradingEngine | null
   engine: Engine
   eventLog: EventLog
   heartbeat: Heartbeat
   cronEngine: CronEngine
-  reconnectCrypto?: () => Promise<ReconnectResult>
-  reconnectSecurities?: () => Promise<ReconnectResult>
-  reconnectConnectors?: () => Promise<ReconnectResult>
-  /** Current crypto trading engine (updates on reconnect). */
-  getCryptoEngine?: () => ICryptoTradingEngine | null
-  /** Current securities trading engine (updates on reconnect). */
-  getSecuritiesEngine?: () => ISecuritiesTradingEngine | null
-  /** Current crypto wallet (updates on reconnect). */
-  getCryptoWallet?: () => Wallet | null
-  /** Current securities wallet (updates on reconnect). */
-  getSecWallet?: () => SecWallet | null
-  /** Central tool registry. */
-  toolCenter?: ToolCenter
+  toolCenter: ToolCenter
+
+  // Trading (unified account model)
+  accountManager: AccountManager
+  /** Get the TradingGit instance for an account by ID. */
+  getAccountGit: (accountId: string) => ITradingGit | undefined
+  /** Reconnect a specific trading account by ID. */
+  reconnectAccount: (accountId: string) => Promise<ReconnectResult>
+  /** Reconnect connector plugins (Telegram, MCP-Ask, etc.). */
+  reconnectConnectors: () => Promise<ReconnectResult>
 }
 
 /** A media attachment collected from tool results (e.g. browser screenshots). */

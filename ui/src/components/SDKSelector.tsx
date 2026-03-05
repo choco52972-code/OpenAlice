@@ -189,6 +189,23 @@ export const SECURITIES_SDK_OPTIONS: SDKOption[] = [
   },
 ]
 
+export const PLATFORM_TYPE_OPTIONS: SDKOption[] = [
+  {
+    id: 'ccxt',
+    name: 'CCXT (Crypto)',
+    description: 'Unified API for 100+ crypto exchanges. Supports Binance, Bybit, OKX, Coinbase, and more.',
+    badge: 'CC',
+    badgeColor: 'text-accent',
+  },
+  {
+    id: 'alpaca',
+    name: 'Alpaca (Securities)',
+    description: 'Commission-free US equities and ETFs with fractional share support.',
+    badge: 'AL',
+    badgeColor: 'text-green',
+  },
+]
+
 export const DATASOURCE_OPTIONS: SDKOption[] = [
   {
     id: 'openbb',

@@ -1,10 +1,9 @@
-import { useCallback, type ReactNode } from 'react'
-import type { Page } from '../App'
+import { type ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { type Page, ROUTES } from '../App'
 
 interface SidebarProps {
   sseConnected: boolean
-  currentPage: Page
-  onNavigate: (page: Page) => void
   open: boolean
   onClose: () => void
 }
@@ -110,9 +109,9 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    prefix: 'trading',
-    label: 'Crypto',
-    icon: (active) => (
+    page: 'trading' as const,
+    label: 'Trading',
+    icon: (active: boolean) => (
       <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 20h20" />
         <path d="M5 17V10" /><path d="M5 7V4" /><path d="M3 10h4" /><path d="M3 7h4" />
@@ -121,24 +120,6 @@ const NAV_ITEMS: NavItem[] = [
         <path d="M20 17V14" /><path d="M20 11V8" /><path d="M18 14h4" /><path d="M18 11h4" />
       </svg>
     ),
-    children: [
-      { page: 'trading/connection', label: 'Connection' },
-      { page: 'trading/guards', label: 'Guards' },
-    ],
-  },
-  {
-    prefix: 'securities',
-    label: 'Securities',
-    icon: (active) => (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-        <polyline points="17 6 23 6 23 12" />
-      </svg>
-    ),
-    children: [
-      { page: 'securities/connection', label: 'Connection' },
-      { page: 'securities/guards', label: 'Guards' },
-    ],
   },
   {
     page: 'ai-provider',
@@ -172,16 +153,23 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
+// ==================== Helpers ====================
+
+/** Derive active page from current URL path */
+function pathToPage(pathname: string): Page | null {
+  for (const [page, path] of Object.entries(ROUTES) as [Page, string][]) {
+    if (path === pathname) return page
+    // Match root path for chat
+    if (page === 'chat' && pathname === '/') return 'chat'
+  }
+  return null
+}
+
 // ==================== Sidebar ====================
 
-export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }: SidebarProps) {
-  const handleNav = useCallback(
-    (page: Page) => {
-      onNavigate(page)
-      onClose()
-    },
-    [onNavigate, onClose],
-  )
+export function Sidebar({ sseConnected, open, onClose }: SidebarProps) {
+  const location = useLocation()
+  const currentPage = pathToPage(location.pathname)
 
   return (
     <>
@@ -216,20 +204,13 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
         <nav className="flex-1 flex flex-col gap-0.5 px-3">
           {NAV_ITEMS.map((item) => {
             if (isGroup(item)) {
-              const expanded = currentPage.startsWith(`${item.prefix}/`)
+              const expanded = location.pathname.startsWith(`/${item.prefix}`)
               return (
                 <div key={item.prefix}>
                   {/* Group parent */}
-                  <button
-                    onClick={() => {
-                      if (expanded) {
-                        // Already expanded — collapse by navigating away is weird,
-                        // so just toggle to first child (no-op if already there)
-                        // In practice, clicking the active group header does nothing special
-                      } else {
-                        handleNav(item.children[0].page)
-                      }
-                    }}
+                  <Link
+                    to={ROUTES[item.children[0].page]}
+                    onClick={onClose}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
                       expanded
                         ? 'text-text'
@@ -239,7 +220,7 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
                     <span className="flex items-center justify-center w-5 h-5">{item.icon(expanded)}</span>
                     <span className="flex-1">{item.label}</span>
                     <Chevron expanded={expanded} />
-                  </button>
+                  </Link>
 
                   {/* Children — animate height */}
                   <div
@@ -250,9 +231,10 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
                     {item.children.map((child) => {
                       const isActive = currentPage === child.page
                       return (
-                        <button
+                        <Link
                           key={child.page}
-                          onClick={() => handleNav(child.page)}
+                          to={ROUTES[child.page]}
+                          onClick={onClose}
                           className={`w-full flex items-center pl-11 pr-3 py-1.5 rounded-lg text-[13px] transition-colors text-left ${
                             isActive
                               ? 'bg-bg-tertiary text-text'
@@ -260,7 +242,7 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
                           }`}
                         >
                           {child.label}
-                        </button>
+                        </Link>
                       )
                     })}
                   </div>
@@ -271,9 +253,10 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
             // Leaf item
             const isActive = currentPage === item.page
             return (
-              <button
+              <Link
                 key={item.page}
-                onClick={() => handleNav(item.page)}
+                to={ROUTES[item.page]}
+                onClick={onClose}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
                   isActive
                     ? 'bg-bg-tertiary text-text'
@@ -282,7 +265,7 @@ export function Sidebar({ sseConnected, currentPage, onNavigate, open, onClose }
               >
                 <span className="flex items-center justify-center w-5 h-5">{item.icon(isActive)}</span>
                 {item.label}
-              </button>
+              </Link>
             )
           })}
         </nav>

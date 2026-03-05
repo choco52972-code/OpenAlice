@@ -67,12 +67,7 @@ const cryptoSchema = z.object({
       type: z.literal('none'),
     }),
   ]).default({
-    type: 'ccxt', exchange: 'bybit', sandbox: false, demoTrading: true, defaultMarketType: 'swap',
-    // Only load linear (USDT-margined) markets from ccxt.
-    // Default is ['spot', 'linear', 'inverse', 'option'] — the extra categories
-    // add unnecessary parallel requests during loadMarkets(), and any single failure
-    // (common on bybit demo API) aborts the entire init.
-    options: { fetchMarkets: { types: ['linear'] } },
+    type: 'ccxt', exchange: 'binance', sandbox: false, demoTrading: true, defaultMarketType: 'swap',
   }),
   guards: z.array(z.object({
     type: z.string(),
@@ -172,6 +167,53 @@ export const toolsSchema = z.object({
   disabled: z.array(z.string()).default([]),
 })
 
+// ==================== Platform + Account Config ====================
+
+const guardConfigSchema = z.object({
+  type: z.string(),
+  options: z.record(z.string(), z.unknown()).default({}),
+})
+
+const ccxtPlatformSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  type: z.literal('ccxt'),
+  exchange: z.string(),
+  sandbox: z.boolean().default(false),
+  demoTrading: z.boolean().default(false),
+  defaultMarketType: z.enum(['spot', 'swap']).default('swap'),
+  options: z.record(z.string(), z.unknown()).optional(),
+})
+
+const alpacaPlatformSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  type: z.literal('alpaca'),
+  paper: z.boolean().default(true),
+})
+
+export const platformConfigSchema = z.discriminatedUnion('type', [
+  ccxtPlatformSchema,
+  alpacaPlatformSchema,
+])
+
+export const platformsFileSchema = z.array(platformConfigSchema)
+
+export const accountConfigSchema = z.object({
+  id: z.string(),
+  platformId: z.string(),
+  label: z.string().optional(),
+  apiKey: z.string().optional(),
+  apiSecret: z.string().optional(),
+  password: z.string().optional(),
+  guards: z.array(guardConfigSchema).default([]),
+})
+
+export const accountsFileSchema = z.array(accountConfigSchema)
+
+export type PlatformConfig = z.infer<typeof platformConfigSchema>
+export type AccountConfig = z.infer<typeof accountConfigSchema>
+
 // ==================== Unified Config Type ====================
 
 export type Config = {
@@ -221,6 +263,7 @@ export async function loadConfig(): Promise<Config> {
   const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'openbb.json', 'compaction.json', 'ai-provider.json', 'heartbeat.json', 'connectors.json', 'news-collector.json', 'tools.json'] as const
   const raws = await Promise.all(files.map((f) => loadJsonFile(f)))
 
+  // TODO: remove all migration blocks before v1.0 — no stable release yet, breaking changes are fine
   // ---------- Migration: consolidate old ai-provider + model + api-keys → ai-provider ----------
   const aiProviderRaw = raws[6] as Record<string, unknown> | undefined
   if (aiProviderRaw && !('backend' in aiProviderRaw)) {
@@ -275,6 +318,122 @@ export async function loadConfig(): Promise<Config> {
     newsCollector: await parseAndSeed(files[9], newsCollectorSchema, raws[9]),
     tools:         await parseAndSeed(files[10], toolsSchema, raws[10]),
   }
+}
+
+// ==================== Trading Config Loader ====================
+
+/**
+ * Load platform + account config.
+ * Prefers platforms.json + accounts.json. Falls back to legacy crypto.json + securities.json.
+ */
+export async function loadTradingConfig(): Promise<{
+  platforms: PlatformConfig[]
+  accounts: AccountConfig[]
+}> {
+  const [rawPlatforms, rawAccounts] = await Promise.all([
+    loadJsonFile('platforms.json'),
+    loadJsonFile('accounts.json'),
+  ])
+
+  if (rawPlatforms !== undefined && rawAccounts !== undefined) {
+    return {
+      platforms: platformsFileSchema.parse(rawPlatforms),
+      accounts: accountsFileSchema.parse(rawAccounts),
+    }
+  }
+
+  // Migration: derive from legacy crypto.json + securities.json
+  return migrateLegacyTradingConfig()
+}
+
+/** Derive platform+account config from old crypto.json + securities.json, then write to disk.
+ *  TODO: remove before v1.0 — drop crypto.json/securities.json support entirely */
+async function migrateLegacyTradingConfig(): Promise<{
+  platforms: PlatformConfig[]
+  accounts: AccountConfig[]
+}> {
+  const [rawCrypto, rawSecurities] = await Promise.all([
+    loadJsonFile('crypto.json'),
+    loadJsonFile('securities.json'),
+  ])
+
+  const crypto = cryptoSchema.parse(rawCrypto ?? {})
+  const securities = securitiesSchema.parse(rawSecurities ?? {})
+
+  const platforms: PlatformConfig[] = []
+  const accounts: AccountConfig[] = []
+
+  if (crypto.provider.type === 'ccxt') {
+    const p = crypto.provider
+    const platformId = `${p.exchange}-platform`
+    platforms.push({
+      id: platformId,
+      type: 'ccxt',
+      exchange: p.exchange,
+      sandbox: p.sandbox,
+      demoTrading: p.demoTrading,
+      defaultMarketType: p.defaultMarketType,
+      options: p.options,
+    })
+    accounts.push({
+      id: `${p.exchange}-main`,
+      platformId,
+      apiKey: p.apiKey,
+      apiSecret: p.apiSecret,
+      password: p.password,
+      guards: crypto.guards,
+    })
+  }
+
+  if (securities.provider.type === 'alpaca') {
+    const p = securities.provider
+    const platformId = 'alpaca-platform'
+    platforms.push({
+      id: platformId,
+      type: 'alpaca',
+      paper: p.paper,
+    })
+    accounts.push({
+      id: p.paper ? 'alpaca-paper' : 'alpaca-live',
+      platformId,
+      apiKey: p.apiKey,
+      apiSecret: p.secretKey,
+      guards: securities.guards,
+    })
+  }
+
+  // Seed to disk so the user can edit the new format directly
+  await mkdir(CONFIG_DIR, { recursive: true })
+  await Promise.all([
+    writeFile(resolve(CONFIG_DIR, 'platforms.json'), JSON.stringify(platforms, null, 2) + '\n'),
+    writeFile(resolve(CONFIG_DIR, 'accounts.json'), JSON.stringify(accounts, null, 2) + '\n'),
+  ])
+
+  return { platforms, accounts }
+}
+
+// ==================== Platform / Account file helpers ====================
+
+export async function readPlatformsConfig(): Promise<PlatformConfig[]> {
+  const raw = await loadJsonFile('platforms.json')
+  return platformsFileSchema.parse(raw ?? [])
+}
+
+export async function writePlatformsConfig(platforms: PlatformConfig[]): Promise<void> {
+  const validated = platformsFileSchema.parse(platforms)
+  await mkdir(CONFIG_DIR, { recursive: true })
+  await writeFile(resolve(CONFIG_DIR, 'platforms.json'), JSON.stringify(validated, null, 2) + '\n')
+}
+
+export async function readAccountsConfig(): Promise<AccountConfig[]> {
+  const raw = await loadJsonFile('accounts.json')
+  return accountsFileSchema.parse(raw ?? [])
+}
+
+export async function writeAccountsConfig(accounts: AccountConfig[]): Promise<void> {
+  const validated = accountsFileSchema.parse(accounts)
+  await mkdir(CONFIG_DIR, { recursive: true })
+  await writeFile(resolve(CONFIG_DIR, 'accounts.json'), JSON.stringify(validated, null, 2) + '\n')
 }
 
 // ==================== Hot-read helpers ====================
