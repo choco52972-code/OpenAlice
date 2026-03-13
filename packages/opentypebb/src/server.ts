@@ -15,8 +15,9 @@
  */
 
 import { setupProxy } from './core/utils/proxy.js'
-import { createApp, startServer } from './core/api/rest-api.js'
-import { createExecutor, loadAllRouters } from './core/api/app-loader.js'
+import { createApp, startServer, mountWidgetsEndpoint } from './core/api/rest-api.js'
+import { createExecutor, createRegistry, loadAllRouters } from './core/api/app-loader.js'
+import { buildWidgetsJson } from './core/api/widgets.js'
 
 // Must be called before any fetch() calls
 setupProxy()
@@ -27,14 +28,22 @@ if (process.env.FMP_API_KEY) {
   defaultCredentials.fmp_api_key = process.env.FMP_API_KEY
 }
 
-// Create executor with all providers loaded
+// Create registry and executor with all providers loaded
+const registry = createRegistry()
 const executor = createExecutor()
 
 // Create Hono app
 const app = createApp(defaultCredentials)
 
-// Load and mount all extension routers
+// Load all extension routers
 const rootRouter = loadAllRouters()
+
+// Build widgets.json from router commands + provider registry + Zod schemas
+const widgetsJson = buildWidgetsJson(rootRouter, registry)
+mountWidgetsEndpoint(app, widgetsJson)
+console.log(`Built widgets.json with ${Object.keys(widgetsJson).length} widgets`)
+
+// Mount all extension routers as API endpoints
 rootRouter.mountToHono(app, executor)
 
 // Start server

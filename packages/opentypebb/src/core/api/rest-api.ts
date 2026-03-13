@@ -1,18 +1,21 @@
 /**
  * REST API setup using Hono.
- * Maps to: openbb_core/api/rest_api.py
+ * Maps to: openbb_core/api/rest_api.py + platform_api/main.py
  *
  * Creates the Hono app with:
  * - CORS middleware
  * - Default credential injection middleware
  * - Error handling
  * - Health check endpoint
+ * - /widgets.json endpoint (for OpenBB Workspace frontend)
  */
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import type { Credentials } from '../app/model/credentials.js'
+
+const OBB_HEADERS = { 'X-Backend-Type': 'OpenBB Platform' }
 
 /**
  * Create the Hono app with middleware configured.
@@ -33,6 +36,26 @@ export function createApp(
   app.get('/api/v1/health', (c) => c.json({ status: 'ok' }))
 
   return app
+}
+
+/**
+ * Mount the /widgets.json endpoint on the app.
+ * Maps to: @app.get("/widgets.json") in platform_api/main.py
+ *
+ * The widgets config is generated once at startup and cached.
+ * This is the endpoint that the OpenBB Workspace frontend fetches
+ * to discover available data widgets.
+ *
+ * @param app - The Hono app
+ * @param widgetsJson - Pre-built widgets configuration
+ */
+export function mountWidgetsEndpoint(
+  app: Hono,
+  widgetsJson: Record<string, unknown>,
+): void {
+  app.get('/widgets.json', (c) => {
+    return c.json(widgetsJson, 200, OBB_HEADERS)
+  })
 }
 
 /**
