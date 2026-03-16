@@ -138,7 +138,7 @@ describe('createOperationDispatcher', () => {
       expect(account.closePosition).toHaveBeenCalledTimes(1)
       const [passedContract, qty] = account.closePosition.mock.calls[0]
       expect(passedContract.symbol).toBe('AAPL')
-      expect(qty.toNumber()).toBe(5)
+      expect(qty!.toNumber()).toBe(5)
     })
 
     it('passes undefined qty for full close', async () => {

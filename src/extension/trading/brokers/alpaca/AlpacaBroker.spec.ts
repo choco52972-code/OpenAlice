@@ -153,12 +153,12 @@ describe('AlpacaBroker — init()', () => {
   })
 
   it('throws when no apiKey is configured', async () => {
-    const acc = new AlpacaBroker({ apiKey: '', secretKey: '' })
+    const acc = new AlpacaBroker({ apiKey: '', secretKey: '', paper: true })
     await expect(acc.init()).rejects.toThrow('No API credentials')
   })
 
   it('throws when no secretKey is configured', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'key', secretKey: '' })
+    const acc = new AlpacaBroker({ apiKey: 'key', secretKey: '', paper: true })
     await expect(acc.init()).rejects.toThrow('No API credentials')
   })
 
@@ -202,13 +202,13 @@ describe('AlpacaBroker — init()', () => {
 
 describe('AlpacaBroker — searchContracts()', () => {
   it('returns empty array for empty pattern', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const results = await acc.searchContracts('')
     expect(results).toEqual([])
   })
 
   it('uppercases the pattern and returns a contract', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const results = await acc.searchContracts('aapl')
     expect(results).toHaveLength(1)
     expect(results[0].contract.symbol).toBe('AAPL')
@@ -219,7 +219,7 @@ describe('AlpacaBroker — placeOrder()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns success with orderId on filled order', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       createOrder: vi.fn().mockResolvedValue({
         id: 'ord-1', status: 'filled', filled_avg_price: '150.50', filled_qty: '10',
@@ -243,7 +243,7 @@ describe('AlpacaBroker — placeOrder()', () => {
   })
 
   it('returns error when contract resolution fails', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = { createOrder: vi.fn() }
     const contract = new Contract()
     contract.aliceId = ''
@@ -265,7 +265,7 @@ describe('AlpacaBroker — placeOrder()', () => {
 
 describe('AlpacaBroker — getPositions()', () => {
   it('maps raw Alpaca positions to domain Position format', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getPositions: vi.fn().mockResolvedValue([{
         symbol: 'AAPL',
@@ -297,7 +297,7 @@ describe('AlpacaBroker — getContractDetails()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns ContractDetails for a valid symbol', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const query = new Contract()
     query.aliceId = 'alpaca-AAPL'
     query.symbol = 'AAPL'
@@ -312,7 +312,7 @@ describe('AlpacaBroker — getContractDetails()', () => {
   })
 
   it('returns null when symbol cannot be resolved', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const query = new Contract()
     query.aliceId = ''
     query.symbol = ''
@@ -328,7 +328,7 @@ describe('AlpacaBroker — modifyOrder()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('calls client.replaceOrder with mapped IBKR fields', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const replaceOrder = vi.fn().mockResolvedValue({
       id: 'ord-modified', status: 'accepted',
     })
@@ -352,7 +352,7 @@ describe('AlpacaBroker — modifyOrder()', () => {
   })
 
   it('returns error on API failure', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       replaceOrder: vi.fn().mockRejectedValue(new Error('Order not found')),
     }
@@ -376,7 +376,7 @@ describe('AlpacaBroker — cancelOrder()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns true on success', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       cancelOrder: vi.fn().mockResolvedValue(undefined),
     }
@@ -386,7 +386,7 @@ describe('AlpacaBroker — cancelOrder()', () => {
   })
 
   it('returns false on API failure', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       cancelOrder: vi.fn().mockRejectedValue(new Error('Cannot cancel')),
     }
@@ -402,7 +402,7 @@ describe('AlpacaBroker — closePosition()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('full close via native client.closePosition', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       closePosition: vi.fn().mockResolvedValue({
         id: 'close-1', status: 'filled',
@@ -420,7 +420,7 @@ describe('AlpacaBroker — closePosition()', () => {
   })
 
   it('partial close via reverse market order', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getPositions: vi.fn().mockResolvedValue([{
         symbol: 'AAPL',
@@ -457,7 +457,7 @@ describe('AlpacaBroker — closePosition()', () => {
   })
 
   it('returns error when symbol cannot be resolved', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const contract = new Contract()
     contract.aliceId = ''
     contract.symbol = ''
@@ -474,7 +474,7 @@ describe('AlpacaBroker — getAccount()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('maps Alpaca account fields to AccountInfo', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getAccount: vi.fn().mockResolvedValue({
         equity: '100000.00',
@@ -506,7 +506,7 @@ describe('AlpacaBroker — getOrders()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('maps Alpaca orders to OpenOrder[] with correct statuses', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getOrders: vi.fn().mockResolvedValue([
         {
@@ -594,7 +594,7 @@ describe('AlpacaBroker — getQuote()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns mapped quote from client.getSnapshot', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getSnapshot: vi.fn().mockResolvedValue({
         LatestTrade: { Price: 155.25, Timestamp: '2025-01-01T10:00:00Z' },
@@ -617,7 +617,7 @@ describe('AlpacaBroker — getQuote()', () => {
   })
 
   it('throws when contract cannot be resolved', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const contract = new Contract()
     contract.aliceId = ''
     contract.symbol = ''
@@ -632,7 +632,7 @@ describe('AlpacaBroker — getMarketClock()', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns mapped clock data from client.getClock', async () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       getClock: vi.fn().mockResolvedValue({
         is_open: true,
@@ -654,7 +654,7 @@ describe('AlpacaBroker — getMarketClock()', () => {
 
 describe('AlpacaBroker — getCapabilities()', () => {
   it('returns correct supportedSecTypes and supportedOrderTypes', () => {
-    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's' })
+    const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     const caps = acc.getCapabilities()
     expect(caps.supportedSecTypes).toEqual(['STK'])
     expect(caps.supportedOrderTypes).toEqual(['MKT', 'LMT', 'STP', 'STP LMT', 'TRAIL'])

@@ -78,6 +78,7 @@ function makeAccount(overrides?: Partial<{ apiKey: string; apiSecret: string }>)
     apiKey: overrides?.apiKey ?? 'k',
     apiSecret: overrides?.apiSecret ?? 's',
     defaultMarketType: 'swap',
+    sandbox: false,
   })
 }
 
@@ -90,13 +91,13 @@ function setInitialized(acc: CcxtBroker, markets: Record<string, any>) {
 
 describe('CcxtBroker — constructor', () => {
   it('throws for unknown exchange', () => {
-    expect(() => new CcxtBroker({ exchange: 'unknownxyz', apiKey: 'k', apiSecret: 's', defaultMarketType: 'spot' })).toThrow(
+    expect(() => new CcxtBroker({ exchange: 'unknownxyz', apiKey: 'k', apiSecret: 's', defaultMarketType: 'spot', sandbox: false })).toThrow(
       'Unknown CCXT exchange',
     )
   })
 
   it('sets readOnly when no apiKey', () => {
-    const acc = new CcxtBroker({ exchange: 'bybit', apiKey: '', apiSecret: '', defaultMarketType: 'spot' })
+    const acc = new CcxtBroker({ exchange: 'bybit', apiKey: '', apiSecret: '', defaultMarketType: 'spot', sandbox: false })
     expect((acc as any).readOnly).toBe(true)
   })
 
@@ -480,7 +481,7 @@ describe('CcxtBroker — getAccount', () => {
   })
 
   it('throws when read-only', async () => {
-    const acc = new CcxtBroker({ exchange: 'bybit', apiKey: '', apiSecret: '', defaultMarketType: 'swap' })
+    const acc = new CcxtBroker({ exchange: 'bybit', apiKey: '', apiSecret: '', defaultMarketType: 'swap', sandbox: false })
     ;(acc as any).initialized = true
 
     await expect(acc.getAccount()).rejects.toThrow('read-only')
@@ -691,8 +692,8 @@ describe('CcxtBroker — getMarketClock', () => {
     const after = Date.now()
 
     expect(clock.isOpen).toBe(true)
-    expect(clock.timestamp.getTime()).toBeGreaterThanOrEqual(before)
-    expect(clock.timestamp.getTime()).toBeLessThanOrEqual(after)
+    expect(clock.timestamp!.getTime()).toBeGreaterThanOrEqual(before)
+    expect(clock.timestamp!.getTime()).toBeLessThanOrEqual(after)
   })
 })
 
