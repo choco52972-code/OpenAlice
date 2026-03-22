@@ -87,11 +87,9 @@ export function TradingPage() {
           existingAccountIds={tc.accounts.map((a) => a.id)}
           onSave={async (account) => {
             await tc.saveAccount(account)
-            if ('apiKey' in account && account.apiKey) {
-              const result = await tc.reconnectAccount(account.id)
-              if (!result.success) {
-                throw new Error(result.error || 'Connection failed')
-              }
+            const result = await tc.reconnectAccount(account.id)
+            if (!result.success) {
+              throw new Error(result.error || 'Connection failed')
             }
             setDialog(null)
           }}
@@ -284,7 +282,7 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
   onClose: () => void
 }) {
   const [step, setStep] = useState(1)
-  const [type, setType] = useState<'ccxt' | 'alpaca' | null>(null)
+  const [type, setType] = useState<AccountConfig['type'] | null>(null)
 
   // Connection fields
   const [id, setId] = useState('')
@@ -293,14 +291,24 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
   const [demoTrading, setDemoTrading] = useState(false)
   const [paper, setPaper] = useState(true)
 
-  // Credential fields
+  // IBKR connection fields
+  const [ibkrHost, setIbkrHost] = useState('127.0.0.1')
+  const [ibkrPort, setIbkrPort] = useState(7497)
+  const [ibkrClientId, setIbkrClientId] = useState(0)
+  const [ibkrAccountId, setIbkrAccountId] = useState('')
+
+  // Credential fields (ccxt/alpaca only)
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
   const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const defaultId = type === 'ccxt' ? `${exchange}-main` : 'alpaca-paper'
+  // IBKR has no credentials step — only 1 step needed
+  const needsCredentials = type === 'ccxt' || type === 'alpaca'
+  const totalSteps = needsCredentials ? 2 : 1
+
+  const defaultId = type === 'ccxt' ? `${exchange}-main` : type === 'ibkr' ? 'ibkr-paper' : 'alpaca-paper'
   const finalId = id.trim() || defaultId
 
   const handleNext = () => {
@@ -310,40 +318,64 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
       return
     }
     setError('')
-    setStep(2)
+    if (needsCredentials) {
+      setStep(2)
+    } else {
+      handleCreate()
+    }
+  }
+
+  const buildConfig = (): AccountConfig => {
+    switch (type) {
+      case 'ccxt':
+        return {
+          id: finalId, type: 'ccxt', exchange, sandbox, demoTrading,
+          apiKey, apiSecret,
+          ...(password && { password }),
+          guards: [],
+        }
+      case 'alpaca':
+        return {
+          id: finalId, type: 'alpaca', paper,
+          apiKey, apiSecret,
+          guards: [],
+        }
+      case 'ibkr':
+        return {
+          id: finalId, type: 'ibkr', paper,
+          host: ibkrHost, port: ibkrPort, clientId: ibkrClientId,
+          ...(ibkrAccountId && { accountId: ibkrAccountId }),
+          guards: [],
+        }
+      default:
+        throw new Error(`Unknown account type: ${type}`)
+    }
   }
 
   const handleCreate = async () => {
     setSaving(true); setError('')
     try {
-      const account: AccountConfig = type === 'ccxt'
-        ? {
-            id: finalId, type: 'ccxt', exchange, sandbox, demoTrading,
-            apiKey, apiSecret,
-            ...(password && { password }),
-            guards: [],
-          }
-        : {
-            id: finalId, type: 'alpaca', paper,
-            apiKey, apiSecret,
-            guards: [],
-          }
+      const account = buildConfig()
 
-      // Step 1: Test connection before saving anything
+      // Test connection before saving
       const testResult = await api.trading.testConnection(account)
       if (!testResult.success) {
-        setError(testResult.error || 'Connection failed — check your credentials')
+        setError(testResult.error || 'Connection failed')
         setSaving(false)
         return
       }
 
-      // Step 2: Connection verified — now persist config and create UTA
+      // Connection verified — persist config and create UTA
       await onSave(account)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account')
       setSaving(false)
     }
   }
+
+  const typeBadge = type === 'ccxt' ? { text: 'CC', color: 'text-accent bg-accent/10' }
+    : type === 'ibkr' ? { text: 'IB', color: 'text-orange-400 bg-orange-400/10' }
+    : { text: 'AL', color: 'text-green bg-green/10' }
 
   return (
     <Dialog onClose={onClose}>
@@ -357,7 +389,7 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
             </svg>
           </button>
         </div>
-        <StepIndicator current={step} total={2} />
+        <StepIndicator current={step} total={totalSteps} />
       </div>
 
       {/* Body */}
@@ -367,7 +399,7 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
             {/* Platform selection */}
             <div>
               <p className="text-[12px] font-medium text-text-muted uppercase tracking-wide mb-3">Platform</p>
-              <SDKSelector options={PLATFORM_TYPE_OPTIONS} selected={type ?? ''} onSelect={(t) => setType(t as 'ccxt' | 'alpaca')} />
+              <SDKSelector options={PLATFORM_TYPE_OPTIONS} selected={type ?? ''} onSelect={(t) => setType(t as AccountConfig['type'])} />
             </div>
 
             {/* Connection config — expands after platform selection */}
@@ -410,6 +442,28 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
                     <p className="text-[11px] text-text-muted/60">When enabled, orders are routed to Alpaca's paper trading environment.</p>
                   </>
                 )}
+
+                {type === 'ibkr' && (
+                  <>
+                    <Field label="Host">
+                      <input className={inputClass} value={ibkrHost} onChange={(e) => setIbkrHost(e.target.value)} placeholder="127.0.0.1" />
+                    </Field>
+                    <Field label="Port">
+                      <input className={inputClass} type="number" value={ibkrPort} onChange={(e) => setIbkrPort(parseInt(e.target.value) || 7497)} />
+                    </Field>
+                    <Field label="Client ID">
+                      <input className={inputClass} type="number" value={ibkrClientId} onChange={(e) => setIbkrClientId(parseInt(e.target.value) || 0)} />
+                    </Field>
+                    <Field label="Account ID (optional)">
+                      <input className={inputClass} value={ibkrAccountId} onChange={(e) => setIbkrAccountId(e.target.value)} placeholder="Auto-detected from TWS" />
+                    </Field>
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <Toggle checked={paper} onChange={setPaper} />
+                      <span className="text-[13px] text-text">Paper Trading</span>
+                    </label>
+                    <p className="text-[11px] text-text-muted/60">Authentication is handled by TWS/Gateway login — no API keys needed.</p>
+                  </>
+                )}
               </div>
             )}
             {error && <p className="text-[12px] text-red">{error}</p>}
@@ -419,8 +473,8 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
         {step === 2 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-4">
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${type === 'ccxt' ? 'text-accent bg-accent/10' : 'text-green bg-green/10'}`}>
-                {type === 'ccxt' ? 'CC' : 'AL'}
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${typeBadge.color}`}>
+                {typeBadge.text}
               </span>
               <span className="text-[13px] text-text-muted">
                 {type === 'ccxt' ? `${exchange} · CCXT` : `Alpaca · ${paper ? 'Paper' : 'Live'}`}
@@ -450,7 +504,12 @@ function CreateWizard({ existingAccountIds, onSave, onClose }: {
         <button onClick={step === 1 ? onClose : () => { setStep(1); setError('') }} className="btn-secondary">
           {step === 1 ? 'Cancel' : 'Back'}
         </button>
-        {step === 1 && (
+        {step === 1 && !needsCredentials && type && (
+          <button onClick={handleNext} disabled={saving} className="btn-primary">
+            {saving ? 'Connecting...' : 'Create Account'}
+          </button>
+        )}
+        {step === 1 && (needsCredentials || !type) && (
           <button onClick={handleNext} disabled={!type} className="btn-primary">
             Next
           </button>
@@ -537,8 +596,8 @@ function EditDialog({ account, health, onSaveAccount, onDelete, onClose }: {
           )}
         </Section>
 
-        {/* Credentials — not shown for IBKR (auth via TWS login) */}
-        {account.type !== 'ibkr' && <Section title={
+        {/* Credentials — per broker type. IBKR has no credentials (auth via TWS login). */}
+        {(account.type === 'ccxt' || account.type === 'alpaca') && <Section title={
           <div className="flex items-center justify-between w-full">
             <span>Credentials</span>
             <button
@@ -550,14 +609,14 @@ function EditDialog({ account, health, onSaveAccount, onDelete, onClose }: {
           </div>
         }>
           <Field label="API Key">
-            <input className={inputClass} type={showKeys ? 'text' : 'password'} value={'apiKey' in draft ? (draft.apiKey || '') : ''} onChange={(e) => patch('apiKey', e.target.value)} placeholder="Not configured" />
+            <input className={inputClass} type={showKeys ? 'text' : 'password'} value={(draft as CcxtAccountConfig | AlpacaAccountConfig).apiKey || ''} onChange={(e) => patch('apiKey', e.target.value)} placeholder="Not configured" />
           </Field>
           <Field label={account.type === 'alpaca' ? 'Secret Key' : 'API Secret'}>
-            <input className={inputClass} type={showKeys ? 'text' : 'password'} value={'apiSecret' in draft ? (draft.apiSecret || '') : ''} onChange={(e) => patch('apiSecret', e.target.value)} placeholder="Not configured" />
+            <input className={inputClass} type={showKeys ? 'text' : 'password'} value={(draft as CcxtAccountConfig | AlpacaAccountConfig).apiSecret || ''} onChange={(e) => patch('apiSecret', e.target.value)} placeholder="Not configured" />
           </Field>
           {account.type === 'ccxt' && (
             <Field label="Password (optional)">
-              <input className={inputClass} type={showKeys ? 'text' : 'password'} value={'password' in draft ? (draft as CcxtAccountConfig).password || '' : ''} onChange={(e) => patch('password', e.target.value)} placeholder="Required by some exchanges (e.g. OKX)" />
+              <input className={inputClass} type={showKeys ? 'text' : 'password'} value={(draft as CcxtAccountConfig).password || ''} onChange={(e) => patch('password', e.target.value)} placeholder="Required by some exchanges (e.g. OKX)" />
             </Field>
           )}
         </Section>}

@@ -135,11 +135,6 @@ async function main() {
   }
 
   for (const accCfg of accountConfigs) {
-    // IBKR has no API key — auth via TWS/Gateway login. Other brokers require credentials.
-    if (accCfg.type !== 'ibkr' && !accCfg.apiKey) {
-      console.warn(`Account "${accCfg.id}": no API key configured — skipping. Add credentials in the Trading page or accounts.json.`)
-      continue
-    }
     await initAccount(accCfg)
   }
 
