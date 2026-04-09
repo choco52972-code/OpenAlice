@@ -371,6 +371,7 @@ function CreateWizard({ brokerTypes, existingAccountIds, onSave, onClose }: {
     const defaults: Record<string, unknown> = {}
     for (const f of bt.fields) {
       if (f.default !== undefined) defaults[f.name] = f.default
+      else if (f.type === 'select' && f.options?.length) defaults[f.name] = f.options[0].value
     }
     setBrokerConfig(defaults)
   }, [type])
