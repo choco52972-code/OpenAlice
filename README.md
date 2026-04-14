@@ -8,11 +8,13 @@
 
 # Open Alice
 
-Your one-person Wall Street. Alice is an AI trading agent that gives you your own research desk, quant team, trading floor, and risk management — all running on your laptop 24/7.
+Your one-person Wall Street. Alice is an AI trading agent that covers equities, crypto, commodities, forex, and macro — from research and analysis through position entry, ongoing management, to exit. 
 
-- **File-driven** — Markdown defines persona and tasks, JSON defines config, JSONL stores conversations. Both humans and AI control Alice by reading and modifying files. The same read/write primitives that power vibe coding transfer directly to vibe trading. No database, no containers, just files.
-- **Reasoning-driven** — every trading decision is based on continuous reasoning and signal mixing.
-- **OS-native** — Alice can interact with your operating system. Search the web through your browser, send messages via Telegram, and connect to local devices.
+- **Full-spectrum** — analyze and trade across asset classes. Multiple brokers combine into one unified workspace so you're never stuck with "I can see it but can't trade it."
+- **Full-lifecycle** — not just entry signals. Research, position sizing, ongoing monitoring, risk management, and exit decisions — Alice covers the entire trading lifecycle, 24/7.
+- **Full-control** — every trade goes through version history and safety checks, and requires your explicit approval before execution. You see every step, you can stop every step.
+
+Alice runs on your own machine, because trading involves private keys and real money — that trust can't be outsourced.
 
 <p align="center">
   <img src="docs/images/preview.png" alt="Open Alice Preview" width="720">
@@ -23,42 +25,53 @@ Your one-person Wall Street. Alice is an AI trading agent that gives you your ow
 
 ## Features
 
-- **Multi-provider AI** — switch between Claude (via Agent SDK with OAuth or API key) and Vercel AI SDK at runtime, no restart needed
-- **Unified Trading Account (UTA)** — each trading account is a self-contained entity that owns its broker connection, git-like operation history, and guard pipeline. AI interacts with UTAs, never with brokers directly. All order types use IBKR's type system (`@traderalice/ibkr`) as the single source of truth. Supported brokers: CCXT (100+ crypto exchanges), Alpaca (US equities), Interactive Brokers (stocks, options, futures, bonds via TWS/Gateway). Each broker self-registers its config schema and UI field descriptors — adding a new broker requires zero changes to the framework
-- **Trading-as-Git** — stage orders, commit with a message, push to execute. Every commit gets an 8-char hash. Full history reviewable via `tradingLog` / `tradingShow`
-- **Guard pipeline** — pre-execution safety checks (max position size, cooldown, symbol whitelist) that run inside each UTA before orders reach the broker
-- **Market data** — TypeScript-native OpenBB engine (`opentypebb`) with no external sidecar required. Covers equity, crypto, commodity, currency, and macro data with unified symbol search (`marketSearchForResearch`) and technical indicator calculator. Can also expose an embedded OpenBB-compatible HTTP API for external tools
-- **Equity research** — company profiles, financial statements, ratios, analyst estimates, earnings calendar, insider trading, and market movers (top gainers, losers, most active)
-- **News** — background RSS collection from configurable feeds with archive search tools (`globNews`/`grepNews`/`readNews`)
-- **Cognitive state** — persistent "brain" with frontal lobe memory, emotion tracking, and commit history
-- **Event log** — persistent append-only JSONL event log with real-time subscriptions and crash recovery
-- **Cron scheduling** — event-driven cron system with AI-powered job execution and automatic delivery to the last-interacted channel
-- **Evolution mode** — two-tier permission system. Normal mode sandboxes the AI to `data/brain/`; evolution mode gives full project access including Bash, enabling the agent to modify its own source code
-- **Account snapshots** — periodic and event-driven account state capture with equity curve visualization. Configurable snapshot intervals and carry-forward for gaps
-- **Hot-reload** — enable/disable trading accounts and connectors (Telegram, MCP Ask) at runtime without restart
-- **Web UI** — local chat interface with real-time SSE streaming, sub-channels with per-channel AI config, portfolio dashboard with equity curve, and full config management. Dynamic broker config forms rendered from broker-declared schemas
+### Trading
+
+- **Unified Trading Account (UTA)** — multiple brokers (CCXT, Alpaca, Interactive Brokers) combine into unified workspaces. AI interacts with UTAs, never with brokers directly
+- **Trading-as-Git** — stage orders, commit with a message, push to execute. Full history reviewable with commit hashes
+- **Guard pipeline** — pre-execution safety checks (max position size, cooldown, symbol whitelist) per account
+- **Account snapshots** — periodic and event-driven state capture with equity curve visualization
+
+### Research & Analysis
+
+- **Market data** — equity, crypto, commodity, currency, and macro data via TypeScript-native OpenBB engine. Unified cross-asset symbol search and technical indicator calculator
+- **Fundamental research** — company profiles, financial statements, ratios, analyst estimates, earnings calendar, insider trading, and market movers. Currently deepest for equities, expanding to other asset classes
+- **News** — background RSS collection with archive search
+
+### Automation
+
+An append-only event log sits at the center of Alice. All system activity — trades, messages, scheduled fires, heartbeat results — flows through as typed events with real-time subscriptions. Automation features are listeners on this bus:
+
+- **Cron scheduling** — cron expressions, intervals, or one-shot timestamps. On fire, emits an event → listener routes through AI → delivers reply to your last-used channel
+- **Heartbeat** — a special cron job that periodically reviews market conditions, filters by active hours, and only reaches out when something matters
+- **Webhooks** — inbound event triggers from external systems (planned)
+
+### Interface
+
+- **Web UI** — chat with SSE streaming, sub-channels, portfolio dashboard with equity curve, and full config management
+- **Telegram** — mobile access with trading panel
+- **MCP server** — tool exposure for external agents
+
+### And More!
+
+- **Multi-provider AI** — Claude (Agent SDK with OAuth or API key) or Vercel AI SDK (Anthropic, OpenAI, Google), switchable at runtime
+- **Brain** — persistent memory and emotion tracking across conversations
+- **Evolution mode** — permission escalation that gives Alice full project access including Bash, enabling self-modification
+
 
 ## Key Concepts
 
-**Provider** — The AI backend that powers Alice. Claude (via `@anthropic-ai/claude-agent-sdk`, supports OAuth login or API key) or Vercel AI SDK (direct API calls to Anthropic, OpenAI, Google). Switchable at runtime via `ai-provider.json`.
+**UTA (Unified Trading Account)** — The core abstraction. Each UTA wraps a broker connection, operation history, guard pipeline, and snapshot scheduler into a single self-contained workspace. AI and the frontend interact with UTAs exclusively — brokers are internal implementation details. Multiple UTAs work like independent repositories: one for Alpaca US equities, one for Bybit crypto, each with its own history and guards.
 
-**Domain** — Business logic layer (`src/domain/`). Each domain module (trading, market-data, analysis, news, brain, thinking) owns its state and persistence. **Tool** (`src/tool/`) is a thin bridge layer that registers domain capabilities as AI tools in ToolCenter.
+**Trading-as-Git** — The workflow inside each UTA. Stage orders, commit with a message, then push to execute. Push runs guards, dispatches to the broker, snapshots account state, and records a commit with an 8-char hash. Full history is reviewable like `git log` / `git show`.
 
-**UTA (Unified Trading Account)** — The core business entity for trading. Each UTA owns a broker connection (`IBroker`), a git-like operation history (`TradingGit`), a guard pipeline, and a snapshot scheduler. Think of it as a git repository for trades — multiple UTAs are like a monorepo with independent histories. AI and the frontend interact with UTAs exclusively; brokers are internal implementation details. All types (Contract, Order, Execution, OrderState) come from IBKR's type system via `@traderalice/ibkr`. `AccountManager` owns the full UTA lifecycle (create, reconnect, enable/disable, remove).
+**Guard** — A pre-execution safety check that runs inside a UTA before orders reach the broker. Guards enforce limits (max position size, cooldown between trades, symbol whitelist) and are configured per-account. Think of it as ESLint for trading — automated rules that catch problems before they go live.
 
-**Trading-as-Git** — The workflow inside each UTA. Stage operations (`stagePlaceOrder`, `stageClosePosition`, etc.), commit with a message, then push to execute. Push runs guards, dispatches to the broker, snapshots account state, and records a commit with an 8-char hash. Full history is reviewable via `tradingLog` / `tradingShow`.
+**Heartbeat** — A periodic check-in where Alice reviews market conditions and decides whether to send you a message. Useful for monitoring positions overnight or tracking macro events — Alice reaches out when something matters, stays quiet when it doesn't.
 
-**Guard** — A pre-execution check that runs inside a UTA before operations reach the broker. Guards enforce limits (max position size, cooldown between trades, symbol whitelist) and are configured per-account.
+**Connector** — An external interface through which users interact with Alice. Built-in: Web UI, Telegram, MCP Ask. Delivery always goes to the channel you last spoke through.
 
-**Connector** — An external interface through which users interact with Alice. Built-in: Web UI, Telegram, MCP Ask. Connectors register with ConnectorCenter; delivery always goes to the channel of last interaction.
-
-**Brain** — Alice's persistent cognitive state. The frontal lobe stores working memory across rounds; emotion tracking logs sentiment shifts with rationale. Both are versioned as commits.
-
-**Heartbeat** — A periodic check-in where Alice reviews market conditions and decides whether to send you a message. Uses a structured protocol: `HEARTBEAT_OK` (nothing to report), `CHAT_YES` (has something to say), `CHAT_NO` (quiet).
-
-**EventLog** — A persistent append-only JSONL event bus. Cron fires, heartbeat results, and errors all flow through here. Supports real-time subscriptions and crash recovery.
-
-**Evolution Mode** — A permission escalation toggle. Off: Alice can only read/write `data/brain/`. On: full project access including Bash — Alice can modify her own source code.
+**AI Provider** — The AI backend that powers Alice. Claude (via Agent SDK, supports OAuth login or API key) or Vercel AI SDK (Anthropic, OpenAI, Google). Switchable at runtime — no restart needed.
 
 ## Architecture
 
