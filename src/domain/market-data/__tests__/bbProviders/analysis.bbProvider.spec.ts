@@ -33,8 +33,8 @@ beforeAll(async () => {
   calculateIndicator = tools.calculateIndicator
 })
 
-const run = (asset: string, formula: string, precision?: number) =>
-  calculateIndicator.execute({ asset: asset as 'equity', formula, precision }, { toolCallId: 'test', messages: [] as any, abortSignal: undefined as any })
+const run = async (asset: string, formula: string, precision?: number) =>
+  calculateIndicator.execute!({ asset: asset as 'equity', formula, precision }, { toolCallId: 'test', messages: [] as any, abortSignal: undefined as any }) as any
 
 describe('analysis e2e — equity (yfinance)', () => {
   it('CLOSE latest price', async () => {
@@ -143,7 +143,7 @@ describe('analysis e2e — commodity with FMP', () => {
     const currencyClient = new SDKCurrencyClient(executor, 'currency', 'yfinance', ctx.credentials, routeMap)
 
     const tools = createAnalysisTools(equityClient, cryptoClient, currencyClient, commodityClientFmp)
-    const result = await tools.calculateIndicator.execute(
+    const result: any = await tools.calculateIndicator.execute!(
       { asset: 'commodity', formula: "CLOSE('gold', '1d')[-1]" },
       { toolCallId: 'test', messages: [] as any, abortSignal: undefined as any },
     )

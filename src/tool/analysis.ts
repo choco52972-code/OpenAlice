@@ -91,22 +91,31 @@ export function createAnalysisTools(
 ) {
   return {
     calculateIndicator: tool({
-      description: `Calculate technical indicators for any asset (equity, crypto, currency) using formula expressions.
+      description: `Calculate technical indicators for any asset using formula expressions.
 
-Asset classes: "equity" for stocks, "crypto" for cryptocurrencies, "currency" for forex pairs, "commodity" for commodities (gold, oil, etc.).
+Asset classes: "equity" for stocks, "crypto" for cryptocurrencies, "currency" for forex pairs, "commodity" for commodities (use canonical names: gold, crude_oil, copper, etc.).
 
-Data access: CLOSE('AAPL', '1d'), HIGH, LOW, OPEN, VOLUME — args: symbol, interval (e.g. '1d', '1w', '1h').
-Statistics: SMA(data, period), EMA, STDEV, MAX, MIN, SUM, AVERAGE.
-Technical: RSI(data, 14), BBANDS(data, 20, 2), MACD(data, 12, 26, 9), ATR(highs, lows, closes, 14).
-Array access: CLOSE('AAPL', '1d')[-1] for latest price. Supports +, -, *, / operators.
+Data access (returns array — use [-1] for latest value):
+  CLOSE('AAPL', '1d'), HIGH, LOW, OPEN, VOLUME — args: symbol, interval (e.g. '1d', '1w', '1h').
+  CLOSE('AAPL', '1d')[-1] → latest close price as a single number.
+
+Statistics (returns a single number — do NOT use [-1]):
+  SMA(data, period), EMA, STDEV, MAX, MIN, SUM, AVERAGE.
+
+Technical (returns a single number or object — do NOT use [-1]):
+  RSI(data, 14) → number.  BBANDS(data, 20, 2) → {upper, middle, lower}.
+  MACD(data, 12, 26, 9) → {macd, signal, histogram}.  ATR(highs, lows, closes, 14) → number.
+
+Arithmetic: +, -, *, / operators between numbers. E.g. CLOSE(...)[-1] - SMA(..., 50).
 
 Examples:
-  asset="equity":   SMA(CLOSE('AAPL', '1d'), 50)
-  asset="crypto":   RSI(CLOSE('BTCUSD', '1d'), 14)
-  asset="currency": CLOSE('EURUSD', '1d')[-1]
-  asset="commodity": SMA(CLOSE('GC=F', '1d'), 20)   (gold futures)
+  SMA(CLOSE('AAPL', '1d'), 50)              → equity 50-day moving average
+  RSI(CLOSE('BTCUSD', '1d'), 14)            → crypto RSI (single number, no [-1])
+  CLOSE('EURUSD', '1d')[-1]                 → latest forex close (needs [-1])
+  CLOSE('gold', '1d')[-1]                   → latest gold price (canonical name)
 
-Use the corresponding search tool first to resolve the correct symbol.`,
+Returns { value, dataRange } where dataRange shows the actual date span of the data used.
+Use marketSearchForResearch to find the correct symbol first.`,
       inputSchema: z.object({
         asset: z.enum(['equity', 'crypto', 'currency', 'commodity']).describe('Asset class'),
         formula: z.string().describe("Formula expression, e.g. SMA(CLOSE('AAPL', '1d'), 50)"),
