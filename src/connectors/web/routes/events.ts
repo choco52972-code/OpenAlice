@@ -1,11 +1,18 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { EngineContext } from '../../../core/types.js'
-import type { AgentEventMap } from '../../../core/agent-event.js'
 import { isExternalEventType, validateEventPayload } from '../../../core/agent-event.js'
+import type { ProducerHandle } from '../../../core/producer.js'
+
+interface EventsDeps {
+  ctx: EngineContext
+  /** Producer for webhook-ingested events. Narrowed to the set of external
+   *  types; extend its declaration in WebPlugin when adding new external types. */
+  ingestProducer: ProducerHandle<readonly ['task.requested']>
+}
 
 /** Event log routes: GET /, GET /recent, GET /stream (SSE), POST /ingest */
-export function createEventsRoutes(ctx: EngineContext) {
+export function createEventsRoutes({ ctx, ingestProducer }: EventsDeps) {
   const app = new Hono()
 
   // Ingest external events — webhook / API producer surface.
@@ -48,10 +55,12 @@ export function createEventsRoutes(ctx: EngineContext) {
       return c.json({ error: msg }, 400)
     }
 
-    const entry = await ctx.eventLog.append(
-      type as keyof AgentEventMap,
-      payload as AgentEventMap[keyof AgentEventMap],
-    )
+    const entry = await (
+      ingestProducer.emit as unknown as (
+        t: string,
+        p: unknown,
+      ) => Promise<{ seq: number; ts: number; type: string; payload: unknown }>
+    )(type, payload)
     return c.json(entry, 201)
   })
 

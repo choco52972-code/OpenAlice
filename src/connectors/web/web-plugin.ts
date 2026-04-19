@@ -35,6 +35,7 @@ export class WebPlugin implements Plugin {
   private sseByChannel = new Map<string, Map<string, SSEClient>>()
   private unregisterConnector?: () => void
   private chatProducer?: ProducerHandle<readonly ['message.received', 'message.sent']>
+  private ingestProducer?: ProducerHandle<readonly ['task.requested']>
 
   constructor(private config: WebConfig) {}
 
@@ -73,10 +74,18 @@ export class WebPlugin implements Plugin {
 
     app.use('/api/*', cors())
 
-    // ==================== Producer: web chat emits message.received/sent ====================
+    // ==================== Producers ====================
+    // web-chat: emits message.received/sent from the Hono chat routes
     this.chatProducer = ctx.listenerRegistry.declareProducer({
       name: 'web-chat',
       emits: ['message.received', 'message.sent'] as const,
+    })
+    // webhook-ingest: POST /api/events/ingest — enumerates its concrete emits so
+    // each external type shows up on the Flow graph as a real injection edge.
+    // Extend this tuple when adding new `external: true` event types.
+    this.ingestProducer = ctx.listenerRegistry.declareProducer({
+      name: 'webhook-ingest',
+      emits: ['task.requested'] as const,
     })
 
     // ==================== Mount route modules ====================
@@ -88,7 +97,7 @@ export class WebPlugin implements Plugin {
       onConnectorsChange: async () => { await ctx.reconnectConnectors() },
     }))
     app.route('/api/market-data', createMarketDataRoutes(ctx))
-    app.route('/api/events', createEventsRoutes(ctx))
+    app.route('/api/events', createEventsRoutes({ ctx, ingestProducer: this.ingestProducer }))
     app.route('/api/topology', createTopologyRoutes(ctx))
     app.route('/api/cron', createCronRoutes(ctx))
     app.route('/api/heartbeat', createHeartbeatRoutes(ctx))
@@ -123,6 +132,8 @@ export class WebPlugin implements Plugin {
     this.unregisterConnector?.()
     this.chatProducer?.dispose()
     this.chatProducer = undefined
+    this.ingestProducer?.dispose()
+    this.ingestProducer = undefined
     this.server?.close()
   }
 }

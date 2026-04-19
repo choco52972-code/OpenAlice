@@ -67,6 +67,22 @@ export interface MessageSentPayload {
   durationMs: number
 }
 
+export interface TaskRequestedPayload {
+  prompt: string
+}
+
+export interface TaskDonePayload {
+  prompt: string
+  reply: string
+  durationMs: number
+}
+
+export interface TaskErrorPayload {
+  prompt: string
+  error: string
+  durationMs: number
+}
+
 // ==================== Event Map ====================
 
 // Import the actual CronFirePayload type for use in the map
@@ -81,6 +97,9 @@ export interface AgentEventMap {
   'heartbeat.error': HeartbeatErrorPayload
   'message.received': MessageReceivedPayload
   'message.sent': MessageSentPayload
+  'task.requested': TaskRequestedPayload
+  'task.done': TaskDonePayload
+  'task.error': TaskErrorPayload
 }
 
 // ==================== TypeBox Schemas ====================
@@ -136,6 +155,22 @@ const MessageSentSchema = Type.Object({
   durationMs: Type.Number(),
 })
 
+const TaskRequestedSchema = Type.Object({
+  prompt: Type.String(),
+})
+
+const TaskDoneSchema = Type.Object({
+  prompt: Type.String(),
+  reply: Type.String(),
+  durationMs: Type.Number(),
+})
+
+const TaskErrorSchema = Type.Object({
+  prompt: Type.String(),
+  error: Type.String(),
+  durationMs: Type.Number(),
+})
+
 // ==================== AgentEvents — metadata registry ====================
 
 export interface AgentEventMeta {
@@ -182,6 +217,19 @@ export const AgentEvents: { [K in keyof AgentEventMap]: AgentEventMeta } = {
   'message.sent': {
     schema: MessageSentSchema,
     description: 'An assistant reply was dispatched on a connector.',
+  },
+  'task.requested': {
+    schema: TaskRequestedSchema,
+    external: true,
+    description: 'External caller asked Alice to run a one-shot task with the given prompt. Ingestible via POST /api/events/ingest.',
+  },
+  'task.done': {
+    schema: TaskDoneSchema,
+    description: 'A requested task completed and its reply was dispatched.',
+  },
+  'task.error': {
+    schema: TaskErrorSchema,
+    description: 'A requested task failed during execution.',
   },
 }
 

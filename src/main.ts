@@ -44,6 +44,7 @@ import { createEventBus } from './core/event-bus.js'
 import { createCronEngine, createCronListener, createCronTools } from './task/cron/index.js'
 import { createHeartbeat } from './task/heartbeat/index.js'
 import { createMetricsListener } from './task/metrics/index.js'
+import { createTaskRouter } from './task/task-router/index.js'
 import { NewsCollectorStore, NewsCollector } from './domain/news/index.js'
 import { createNewsArchiveTools } from './tool/news.js'
 
@@ -286,6 +287,11 @@ async function main() {
   if (config.heartbeat.enabled) {
     console.log(`heartbeat: enabled (every ${config.heartbeat.every})`)
   }
+
+  // ==================== Task Router (external `task.requested` handler) ====================
+
+  const taskRouter = createTaskRouter({ connectorCenter, agentCenter, registry: listenerRegistry })
+  await taskRouter.start()
 
   // ==================== Event Metrics (wildcard observer) ====================
 
