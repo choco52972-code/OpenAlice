@@ -16,6 +16,7 @@ import { createTopologyRoutes } from './routes/topology.js'
 import { createCronRoutes } from './routes/cron.js'
 import { createHeartbeatRoutes } from './routes/heartbeat.js'
 import { createDiaryRoutes } from './routes/diary.js'
+import { createBrainRoutes } from './routes/brain.js'
 import { createTradingRoutes } from './routes/trading.js'
 import { createTradingConfigRoutes } from './routes/trading-config.js'
 import { createDevRoutes } from './routes/dev.js'
@@ -23,6 +24,9 @@ import { createToolsRoutes } from './routes/tools.js'
 import { createAgentStatusRoutes } from './routes/agent-status.js'
 import { createPersonaRoutes } from './routes/persona.js'
 import { createNewsRoutes } from './routes/news.js'
+import { createMarketRoutes } from './routes/market.js'
+import { mountOpenTypeBB } from '../../server/opentypebb.js'
+import { buildSDKCredentials } from '../../domain/market-data/credential-map.js'
 
 export interface WebConfig {
   port: number
@@ -102,13 +106,24 @@ export class WebPlugin implements Plugin {
     app.route('/api/cron', createCronRoutes(ctx))
     app.route('/api/heartbeat', createHeartbeatRoutes(ctx))
     app.route('/api/diary', createDiaryRoutes(ctx))
+    app.route('/api/brain', createBrainRoutes())
     app.route('/api/trading/config', createTradingConfigRoutes(ctx))
     app.route('/api/trading', createTradingRoutes(ctx))
     app.route('/api/dev', createDevRoutes(ctx.connectorCenter))
     app.route('/api/tools', createToolsRoutes(ctx.toolCenter))
     app.route('/api/agent-status', createAgentStatusRoutes(ctx))
     app.route('/api/news', createNewsRoutes(ctx))
+    app.route('/api/market', createMarketRoutes(ctx))
     app.route('/api/persona', createPersonaRoutes())
+
+    // ==================== Mount opentypebb (market data HTTP) ====================
+    // opentypebb is Alice's first-class market-data package; its router is
+    // merged into this app so UI and external consumers hit a single port.
+    mountOpenTypeBB(app, ctx.bbEngine, {
+      basePath: '/api/market-data-v1',
+      defaultCredentials: buildSDKCredentials(ctx.config.marketData.providerKeys),
+      defaultProviders: ctx.config.marketData.providers,
+    })
 
     // ==================== Serve UI (Vite build output) ====================
     const uiRoot = resolve('dist/ui')

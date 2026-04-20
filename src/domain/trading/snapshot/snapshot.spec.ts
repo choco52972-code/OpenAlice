@@ -42,7 +42,7 @@ function makeSubmittedOrder(symbol = 'AAPL'): ReturnType<typeof makeOpenOrder> {
   order.action = 'BUY'
   order.orderType = 'LMT'
   order.totalQuantity = new Decimal(5)
-  order.lmtPrice = 150
+  order.lmtPrice = new Decimal(150)
   const orderState = new OrderState()
   orderState.status = 'Submitted'
   return { contract, order, orderState }
@@ -114,7 +114,7 @@ describe('Snapshot Builder', () => {
     order.action = 'BUY'
     order.orderType = 'LMT'
     order.totalQuantity = new Decimal(5)
-    order.lmtPrice = 140
+    order.lmtPrice = new Decimal(140)
     order.tif = 'DAY'
 
     uta.git.add({ action: 'placeOrder', contract, order })

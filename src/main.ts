@@ -1,4 +1,4 @@
-import { readFile, writeFile, appendFile, mkdir } from 'fs/promises'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 import { resolve, dirname } from 'path'
 // Engine removed — AgentCenter is the top-level AI entry point
 import { loadConfig, readAccountsConfig } from './core/config.js'
@@ -25,7 +25,6 @@ import { OpenBBEquityClient } from './domain/market-data/client/openbb-api/equit
 import { OpenBBCryptoClient } from './domain/market-data/client/openbb-api/crypto-client.js'
 import { OpenBBCurrencyClient } from './domain/market-data/client/openbb-api/currency-client.js'
 import { OpenBBCommodityClient } from './domain/market-data/client/openbb-api/commodity-client.js'
-import { OpenBBServerPlugin } from './server/opentypebb.js'
 import { createMarketSearchTools } from './tool/market.js'
 import { createAnalysisTools } from './tool/analysis.js'
 import { createSessionTools } from './tool/session.js'
@@ -53,13 +52,24 @@ import { createNewsArchiveTools } from './tool/news.js'
 const BRAIN_FILE = resolve('data/brain/commit.json')
 
 const FRONTAL_LOBE_FILE = resolve('data/brain/frontal-lobe.md')
-const EMOTION_LOG_FILE = resolve('data/brain/emotion-log.md')
 const PERSONA_FILE = resolve('data/brain/persona.md')
 const PERSONA_DEFAULT = resolve('default/persona.default.md')
 const HEARTBEAT_FILE = resolve('data/brain/heartbeat.md')
 const HEARTBEAT_DEFAULT = resolve('default/heartbeat.default.md')
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+/** Render a timestamp as "Nm ago" / "Nh ago" / "Nd ago" for prompt injection. */
+function formatRelativeAge(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  if (diffMs < 60_000) return 'just now'
+  const mins = Math.floor(diffMs / 60_000)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
 
 /** Read a file, copying from default if it doesn't exist yet. */
 async function readWithDefault(target: string, defaultFile: string): Promise<string> {
@@ -121,33 +131,28 @@ async function main() {
     await mkdir(brainDir, { recursive: true })
     await writeFile(BRAIN_FILE, JSON.stringify(state, null, 2))
     await writeFile(FRONTAL_LOBE_FILE, state.state.frontalLobe)
-    const latest = state.commits[state.commits.length - 1]
-    if (latest?.type === 'emotion') {
-      const prev = state.commits.length > 1
-        ? state.commits[state.commits.length - 2]?.stateAfter.emotion ?? 'unknown'
-        : 'unknown'
-      await appendFile(EMOTION_LOG_FILE,
-        `## ${latest.timestamp}\n**${prev} → ${latest.stateAfter.emotion}**\n${latest.message}\n\n`)
-    }
   }
 
   const brain = brainExport
     ? Brain.restore(brainExport, { onCommit: brainOnCommit })
     : new Brain({ onCommit: brainOnCommit })
 
-  /** Re-read persona from disk + live brain state on each request. */
+  /** Re-read persona from disk + live frontal-lobe note on each request.
+   *  Frames the note as "you wrote this Nh ago" rather than "current state"
+   *  — the time-distance cue stops her from treating a stale note as
+   *  ground truth. */
   const getInstructions = async () => {
     const persona = await readFile(PERSONA_FILE, 'utf-8').catch(() => '')
-    const frontalLobe = brain.getFrontalLobe()
-    const emotion = brain.getEmotion().current
+    const { content, updatedAt } = brain.getFrontalLobeMeta()
+    if (!content) return persona
+    const age = updatedAt ? formatRelativeAge(updatedAt) : 'at some point'
     return [
       persona,
       '---',
-      '## Current Brain State',
+      '## Notes you wrote to yourself',
+      `_(written ${age})_`,
       '',
-      `**Frontal Lobe:** ${frontalLobe || '(empty)'}`,
-      '',
-      `**Emotion:** ${emotion}`,
+      content,
     ].join('\n')
   }
 
@@ -195,8 +200,6 @@ async function main() {
     derivativesClient = new SDKDerivativesClient(executor, 'derivatives', providers.equity, credentials, routeMap)
   }
 
-  // OpenBB API server is started later via optionalPlugins
-
   // ==================== FX Service ====================
 
   const fxService = new FxService(currencyClient)
@@ -209,6 +212,8 @@ async function main() {
 
   const commodityCatalog = new CommodityCatalog()
   commodityCatalog.load()
+
+  const marketSearch = { symbolIndex, cryptoClient, currencyClient, commodityCatalog }
 
   // ==================== Tool Registration ====================
 
@@ -223,7 +228,7 @@ async function main() {
   toolCenter.register(createBrainTools(brain), 'brain')
   toolCenter.register(createBrowserTools(), 'browser')
   toolCenter.register(createCronTools(cronEngine), 'cron')
-  toolCenter.register(createMarketSearchTools(symbolIndex, cryptoClient, currencyClient, commodityCatalog), 'market-search')
+  toolCenter.register(createMarketSearchTools(marketSearch), 'market-search')
   toolCenter.register(createEquityTools(equityClient), 'equity')
   if (config.news.enabled) {
     toolCenter.register(createNewsArchiveTools(newsStore), 'news')
@@ -348,10 +353,6 @@ async function main() {
     }))
   }
 
-  if (config.marketData.apiServer.enabled) {
-    optionalPlugins.set('openbb-server', new OpenBBServerPlugin({ port: config.marketData.apiServer.port }))
-  }
-
   // ==================== Connector Reconnect ====================
 
   let connectorsReconnecting = false
@@ -393,30 +394,6 @@ async function main() {
         changes.push('telegram started')
       }
 
-      // --- OpenBB API Server ---
-      const openbbWanted = fresh.marketData.apiServer.enabled
-      const openbbRunning = optionalPlugins.has('openbb-server')
-      if (openbbRunning && !openbbWanted) {
-        await optionalPlugins.get('openbb-server')!.stop()
-        optionalPlugins.delete('openbb-server')
-        changes.push('openbb-server stopped')
-      } else if (!openbbRunning && openbbWanted) {
-        const p = new OpenBBServerPlugin({ port: fresh.marketData.apiServer.port })
-        await p.start(ctx)
-        optionalPlugins.set('openbb-server', p)
-        changes.push('openbb-server started')
-      } else if (openbbRunning && openbbWanted) {
-        const current = optionalPlugins.get('openbb-server') as OpenBBServerPlugin
-        if (current.port !== fresh.marketData.apiServer.port) {
-          await current.stop()
-          optionalPlugins.delete('openbb-server')
-          const p = new OpenBBServerPlugin({ port: fresh.marketData.apiServer.port })
-          await p.start(ctx)
-          optionalPlugins.set('openbb-server', p)
-          changes.push(`openbb-server restarted on port ${fresh.marketData.apiServer.port}`)
-        }
-      }
-
       if (changes.length > 0) {
         console.log(`reconnect: connectors — ${changes.join(', ')}`)
       }
@@ -437,6 +414,7 @@ async function main() {
     listenerRegistry,
     fire: createEventBus(eventLog),
     bbEngine: getSDKExecutor(),
+    marketSearch,
     accountManager, fxService, snapshotService,
     newsProvider: newsStore,
     reconnectConnectors,
