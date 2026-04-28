@@ -69,13 +69,45 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
 
       {!loading && !error && hits && hits.length > 0 && (
         <ul className="flex flex-col divide-y divide-border/40 -mx-3">
-          {hits.map((h, i) => (
+          {[...hits].sort(byInstrumentFamiliarity).map((h, i) => (
             <ContractRow key={`${h.source}:${h.contract.aliceId ?? i}`} hit={h} />
           ))}
         </ul>
       )}
     </Card>
   )
+}
+
+/**
+ * Order rows by how directly they relate to the asset the analysis page is
+ * about — stocks first (a user looking at AAPL almost always wants the stock,
+ * not a derivative), then spot, then perpetuals, then dated futures, then
+ * options. Brokers report their own preferred order (CCXT prioritizes swaps
+ * because they're the most-traded products); we override that for the UI.
+ */
+function instrumentTier(hit: ContractSearchHit): number {
+  const c = hit.contract
+  const sec = (c.secType ?? '').toUpperCase()
+  const local = (c.localSymbol ?? c.aliceId ?? '') as string
+  if (sec === 'STK') return 0
+  if (sec === 'CRYPTO') {
+    // CCXT marks both spot and perpetual swaps as CRYPTO. Spot has no `:`
+    // settlement-currency suffix; perpetuals have `:` but no trailing
+    // `-YYMMDD` expiry.
+    if (!local.includes(':')) return 1
+    return 2
+  }
+  if (sec === 'FUT') return 3
+  if (sec === 'OPT') return 4
+  return 5
+}
+
+function byInstrumentFamiliarity(a: ContractSearchHit, b: ContractSearchHit): number {
+  const t = instrumentTier(a) - instrumentTier(b)
+  if (t !== 0) return t
+  // Within the same tier, keep upstream broker order — that already encodes
+  // each broker's "preferred quote currency" / liquidity heuristic.
+  return 0
 }
 
 function ContractRow({ hit }: { hit: ContractSearchHit }) {
