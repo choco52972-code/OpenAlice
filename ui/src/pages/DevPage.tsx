@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import { Section } from '../components/form'
 import { PageHeader } from '../components/PageHeader'
 import { Spinner, EmptyState } from '../components/StateViews'
 import { useToast } from '../components/Toast'
+import { LogsPage } from './LogsPage'
 import {
   devApi,
   type RegistryResponse,
@@ -18,52 +20,37 @@ import { api, type UTASnapshotSummary } from '../api'
 
 // ==================== Tab Types ====================
 
-type Tab = 'connectors' | 'tools' | 'sessions' | 'snapshots'
+const VALID_TABS = ['connectors', 'tools', 'sessions', 'snapshots', 'logs'] as const
+type Tab = typeof VALID_TABS[number]
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'connectors', label: 'Connectors' },
-  { key: 'tools', label: 'Tools' },
-  { key: 'sessions', label: 'Sessions' },
-  { key: 'snapshots', label: 'Snapshots' },
-]
+const TAB_TITLES: Record<Tab, string> = {
+  connectors: 'Connectors',
+  tools: 'Tools',
+  sessions: 'Sessions',
+  snapshots: 'Snapshots',
+  logs: 'Logs',
+}
+
+/** Tabs that render content with internal scroll containers — the outer wrapper must NOT add overflow. */
+const SELF_SCROLLING_TABS: ReadonlySet<Tab> = new Set(['tools', 'logs'])
 
 // ==================== DevPage ====================
 
 export function DevPage() {
-  const [tab, setTab] = useState<Tab>('connectors')
+  const { tab: tabParam } = useParams<{ tab?: string }>()
+  const tab: Tab = (VALID_TABS as readonly string[]).includes(tabParam ?? '')
+    ? (tabParam as Tab)
+    : 'connectors'
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader title="Dev" />
-
-      {/* Tab bar */}
-      <div className="px-4 md:px-6 border-b border-border/60">
-        <div className="flex gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-3 py-2 text-sm font-medium transition-colors relative ${
-                tab === t.key
-                  ? 'text-accent'
-                  : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab content — Tools tab manages its own scroll, others use outer scroll */}
-      <div className={`flex-1 min-h-0 ${tab === 'tools' ? 'flex flex-col' : 'overflow-y-auto'}`}>
+      <PageHeader title={TAB_TITLES[tab]} />
+      <div className={`flex-1 min-h-0 ${SELF_SCROLLING_TABS.has(tab) ? 'flex flex-col' : 'overflow-y-auto'}`}>
         {tab === 'connectors' && <ConnectorsTab />}
         {tab === 'tools' && <ToolsTab />}
         {tab === 'sessions' && <SessionsTab />}
         {tab === 'snapshots' && <SnapshotsTab />}
+        {tab === 'logs' && <LogsPage />}
       </div>
     </div>
   )

@@ -4,12 +4,12 @@ import { Sidebar, isSettingsGroupedRoute } from './components/Sidebar'
 import { SecondarySidebar } from './components/SecondarySidebar'
 import { ChatChannelList } from './components/ChatChannelList'
 import { SettingsCategoryList } from './components/SettingsCategoryList'
+import { DevCategoryList } from './components/DevCategoryList'
 import { ChannelConfigModal } from './components/ChannelConfigModal'
 import { ChatPage } from './pages/ChatPage'
 import { DiaryPage } from './pages/DiaryPage'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { AutomationPage } from './pages/AutomationPage'
-import { LogsPage } from './pages/LogsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AIProviderPage } from './pages/AIProviderPage'
 import { MarketDataPage } from './pages/MarketDataPage'
@@ -25,7 +25,7 @@ import { api } from './api'
 import type { ChannelListItem } from './api/channels'
 
 export type Page =
-  | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'logs' | 'market' | 'market-data' | 'news-collector' | 'connectors'
+  | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'market' | 'market-data' | 'news-collector' | 'connectors'
   | 'trading'
   | 'ai-provider' | 'settings' | 'dev'
 
@@ -35,7 +35,6 @@ export const ROUTES: Record<Page, string> = {
   'diary': '/diary',
   'portfolio': '/portfolio',
   'automation': '/automation',
-  'logs': '/logs',
   'market': '/market',
   'market-data': '/market-data',
   'news-collector': '/news-collector',
@@ -80,6 +79,7 @@ export function App() {
 
   const isOnChatRoute = location.pathname === '/'
   const isOnSettingsRoute = isSettingsGroupedRoute(location.pathname)
+  const isOnDevRoute = location.pathname === '/dev' || location.pathname.startsWith('/dev/')
 
   return (
     <div className="flex h-full">
@@ -124,6 +124,12 @@ export function App() {
         </SecondarySidebar>
       )}
 
+      {isOnDevRoute && (
+        <SecondarySidebar title="Dev">
+          <DevCategoryList />
+        </SecondarySidebar>
+      )}
+
       <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg">
         {/* Mobile header — visible only below md */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-bg-secondary shrink-0 md:hidden">
@@ -154,17 +160,17 @@ export function App() {
             <Route path="/diary" element={<DiaryPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/automation" element={<AutomationPage />} />
-            <Route path="/logs" element={<LogsPage />} />
             <Route path="/market" element={<MarketPage />} />
             <Route path="/market/:assetClass/:symbol" element={<MarketDetailPage />} />
             <Route path="/market-data" element={<MarketDataPage />} />
             <Route path="/news-collector" element={<NewsCollectorPage />} />
             <Route path="/news" element={<NewsPage />} />
             {/* Redirects for old URLs */}
-            <Route path="/events" element={<Navigate to="/logs" replace />} />
+            <Route path="/logs" element={<Navigate to="/dev/logs" replace />} />
+            <Route path="/events" element={<Navigate to="/dev/logs" replace />} />
             <Route path="/heartbeat" element={<Navigate to="/automation" replace />} />
             <Route path="/scheduler" element={<Navigate to="/automation" replace />} />
-            <Route path="/agent-status" element={<Navigate to="/logs" replace />} />
+            <Route path="/agent-status" element={<Navigate to="/dev/logs" replace />} />
             <Route path="/data-sources" element={<Navigate to="/market-data" replace />} />
             <Route path="/connectors" element={<ConnectorsPage />} />
             <Route path="/tools" element={<Navigate to="/settings" replace />} />
@@ -172,7 +178,8 @@ export function App() {
             <Route path="/uta/:id" element={<UTADetailPage />} />
             <Route path="/ai-provider" element={<AIProviderPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/dev" element={<DevPage />} />
+            <Route path="/dev" element={<Navigate to="/dev/connectors" replace />} />
+            <Route path="/dev/:tab" element={<DevPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

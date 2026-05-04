@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api, type EventLogEntry, type ToolCallRecord } from '../api'
 import { useSSE } from '../hooks/useSSE'
-import { PageHeader } from '../components/PageHeader'
 
 // ==================== Helpers ====================
 
@@ -496,8 +495,6 @@ export function LogsPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader title="Logs" />
-
       <div className="px-4 md:px-6 border-b border-border/60">
         <div className="flex gap-1">
           {TABS.map((t) => (
