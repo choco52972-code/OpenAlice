@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, isSettingsGroupedRoute } from './components/Sidebar'
+import { SecondarySidebar } from './components/SecondarySidebar'
+import { ChatChannelList } from './components/ChatChannelList'
+import { SettingsCategoryList } from './components/SettingsCategoryList'
+import { ChannelConfigModal } from './components/ChannelConfigModal'
 import { ChatPage } from './pages/ChatPage'
 import { DiaryPage } from './pages/DiaryPage'
 import { PortfolioPage } from './pages/PortfolioPage'
@@ -17,6 +21,8 @@ import { TradingPage } from './pages/TradingPage'
 import { UTADetailPage } from './pages/UTADetailPage'
 import { ConnectorsPage } from './pages/ConnectorsPage'
 import { DevPage } from './pages/DevPage'
+import { api } from './api'
+import type { ChannelListItem } from './api/channels'
 
 export type Page =
   | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'logs' | 'market' | 'market-data' | 'news-collector' | 'connectors'
@@ -46,6 +52,35 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
+  // ===== Chat channels — lifted from ChatPage so the SecondarySidebar can render the list =====
+  const [channels, setChannels] = useState<ChannelListItem[]>([{ id: 'default', label: 'Alice' }])
+  const [activeChannel, setActiveChannel] = useState('default')
+  const [editingChannel, setEditingChannel] = useState<ChannelListItem | null>(null)
+  const [showNewChannelForm, setShowNewChannelForm] = useState(false)
+
+  useEffect(() => {
+    api.channels.list().then(({ channels: ch }) => setChannels(ch)).catch(() => {})
+  }, [])
+
+  const handleCreateChannel = useCallback(async (id: string, label: string) => {
+    const { channel } = await api.channels.create({ id, label })
+    setChannels((prev) => [...prev, channel])
+    setActiveChannel(channel.id)
+  }, [])
+
+  const handleDeleteChannel = useCallback(async (id: string) => {
+    try {
+      await api.channels.remove(id)
+      setChannels((prev) => prev.filter((ch) => ch.id !== id))
+      setActiveChannel((curr) => (curr === id ? 'default' : curr))
+    } catch (err) {
+      console.error('Failed to delete channel:', err)
+    }
+  }, [])
+
+  const isOnChatRoute = location.pathname === '/'
+  const isOnSettingsRoute = isSettingsGroupedRoute(location.pathname)
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -53,6 +88,42 @@ export function App() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
+
+      {/* Page-specific secondary sidebar — VS Code-style. */}
+      {isOnChatRoute && (
+        <SecondarySidebar
+          title="Chats"
+          actions={
+            <button
+              onClick={() => setShowNewChannelForm((v) => !v)}
+              className="w-6 h-6 rounded flex items-center justify-center text-text-muted hover:text-text hover:bg-bg-tertiary/60 transition-colors"
+              title="New channel"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          }
+        >
+          <ChatChannelList
+            channels={channels}
+            activeChannel={activeChannel}
+            showNewForm={showNewChannelForm}
+            onCloseNewForm={() => setShowNewChannelForm(false)}
+            onSelect={setActiveChannel}
+            onEdit={setEditingChannel}
+            onDelete={handleDeleteChannel}
+            onCreate={handleCreateChannel}
+          />
+        </SecondarySidebar>
+      )}
+
+      {isOnSettingsRoute && (
+        <SecondarySidebar title="Settings">
+          <SettingsCategoryList />
+        </SecondarySidebar>
+      )}
+
       <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg">
         {/* Mobile header — visible only below md */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-bg-secondary shrink-0 md:hidden">
@@ -69,7 +140,17 @@ export function App() {
         </div>
         <div key={location.pathname} className="page-fade-in flex-1 flex flex-col min-h-0">
           <Routes>
-            <Route path="/" element={<ChatPage onSSEStatus={setSseConnected} />} />
+            <Route
+              path="/"
+              element={
+                <ChatPage
+                  onSSEStatus={setSseConnected}
+                  channels={channels}
+                  activeChannel={activeChannel}
+                  onChannelChange={setActiveChannel}
+                />
+              }
+            />
             <Route path="/diary" element={<DiaryPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/automation" element={<AutomationPage />} />
@@ -96,6 +177,18 @@ export function App() {
           </Routes>
         </div>
       </main>
+
+      {/* Channel config modal — mounts at app level so SecondarySidebar can trigger it */}
+      {editingChannel && (
+        <ChannelConfigModal
+          channel={editingChannel}
+          onClose={() => setEditingChannel(null)}
+          onSaved={(updated) => {
+            setChannels((prev) => prev.map((ch) => ch.id === updated.id ? updated : ch))
+            setEditingChannel(null)
+          }}
+        />
+      )}
     </div>
   )
 }
