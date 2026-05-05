@@ -8,7 +8,7 @@ import { SECTIONS, STANDALONE_ROUTES, REDIRECT_ROUTES, findActiveSection } from 
 
 export type Page =
   | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'market' | 'market-data' | 'news-collector' | 'connectors'
-  | 'trading'
+  | 'trade' | 'trading'
   | 'ai-provider' | 'settings' | 'dev'
 
 /** Page type → URL path mapping. Used by the activity bar to know where each icon links. */
@@ -22,6 +22,7 @@ export const ROUTES: Record<Page, string> = {
   'news-collector': '/news-collector',
   'news': '/news',
   'connectors': '/connectors',
+  'trade': '/trade',
   'trading': '/trading',
   'ai-provider': '/ai-provider',
   'settings': '/settings',

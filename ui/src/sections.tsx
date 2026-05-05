@@ -21,12 +21,14 @@ import { MarketDetailPage } from './pages/MarketDetailPage'
 import { NewsPage } from './pages/NewsPage'
 import { NewsCollectorPage } from './pages/NewsCollectorPage'
 import { TradingPage } from './pages/TradingPage'
+import { TradePage } from './pages/TradePage'
 import { UTADetailPage } from './pages/UTADetailPage'
 import { ConnectorsPage } from './pages/ConnectorsPage'
 import { DevPage } from './pages/DevPage'
 
-import { ChatSidebarContent } from './components/ChatSidebarContent'
+import { ChatChannelListContainer } from './components/ChatChannelListContainer'
 import { NewChannelButton } from './components/NewChannelButton'
+import { PushApprovalPanel } from './components/PushApprovalPanel'
 import { SettingsCategoryList } from './components/SettingsCategoryList'
 import { DevCategoryList } from './components/DevCategoryList'
 
@@ -52,10 +54,18 @@ export const SECTIONS: AppSection[] = [
   {
     paths: ['/'],
     title: 'Chat',
-    Secondary: ChatSidebarContent,
+    Secondary: ChatChannelListContainer,
     Actions: NewChannelButton,
     routes: [
       { path: '/', element: <ChatPage /> },
+    ],
+  },
+  {
+    paths: ['/trade'],
+    title: 'Trading',
+    Secondary: PushApprovalPanel,
+    routes: [
+      { path: '/trade', element: <TradePage /> },
     ],
   },
   {

@@ -46,6 +46,20 @@ const NAV_SECTIONS: NavSection[] = [
         ),
       },
       {
+        page: 'trade',
+        label: 'Trading',
+        icon: (active) => (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6" cy="6" r="2.5" />
+            <circle cx="6" cy="18" r="2.5" />
+            <circle cx="18" cy="12" r="2.5" />
+            <path d="M6 8.5v7" />
+            <path d="M8.5 6h4a3 3 0 0 1 3 3v0" />
+            <path d="M8.5 18h4a3 3 0 0 0 3-3v0" />
+          </svg>
+        ),
+      },
+      {
         page: 'market',
         label: 'Market',
         icon: (active) => (
