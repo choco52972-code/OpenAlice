@@ -6,10 +6,15 @@ import { ChannelConfigModal } from './components/ChannelConfigModal'
 import { ChannelsProvider, useChannels } from './contexts/ChannelsContext'
 import { SECTIONS, STANDALONE_ROUTES, REDIRECT_ROUTES, findActiveSection } from './sections'
 
+/**
+ * Activity-bar pages — only items that appear as icons in the ActivityBar.
+ * Settings sub-pages (AI Provider, Trading Accounts, etc.) live under
+ * /settings/* and are addressed via SettingsCategoryList, not via this enum.
+ */
 export type Page =
-  | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'market' | 'market-data' | 'news-collector' | 'connectors'
-  | 'trading-as-git' | 'trading'
-  | 'ai-provider' | 'settings' | 'dev'
+  | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'market'
+  | 'trading-as-git'
+  | 'settings' | 'dev'
 
 /** Page type → URL path mapping. Used by the activity bar to know where each icon links. */
 export const ROUTES: Record<Page, string> = {
@@ -18,13 +23,8 @@ export const ROUTES: Record<Page, string> = {
   'portfolio': '/portfolio',
   'automation': '/automation',
   'market': '/market',
-  'market-data': '/market-data',
-  'news-collector': '/news-collector',
   'news': '/news',
-  'connectors': '/connectors',
   'trading-as-git': '/trading-as-git',
-  'trading': '/trading',
-  'ai-provider': '/ai-provider',
   'settings': '/settings',
   'dev': '/dev',
 }

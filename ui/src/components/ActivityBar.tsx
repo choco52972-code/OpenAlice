@@ -139,18 +139,10 @@ const NAV_SECTIONS: NavSection[] = [
 // ==================== Helpers ====================
 
 /**
- * Routes that live inside the Settings secondary sidebar. The Settings
- * primary icon highlights as active for any of these.
+ * Routes that live inside the Settings sidebar. The Settings activity-bar
+ * icon highlights as active for any pathname under /settings.
  */
-const SETTINGS_GROUPED_ROUTES = [
-  '/settings',
-  '/ai-provider',
-  '/trading',
-  '/uta',
-  '/connectors',
-  '/news-collector',
-  '/market-data',
-]
+const SETTINGS_GROUPED_ROUTES = ['/settings']
 
 export function isSettingsGroupedRoute(pathname: string): boolean {
   return SETTINGS_GROUPED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + '/'))

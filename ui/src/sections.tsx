@@ -6,7 +6,7 @@
  * doesn't need to grow if-then chains.
  */
 
-import { Navigate } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import type { ComponentType, ReactElement } from 'react'
 
 import { ChatPage } from './pages/ChatPage'
@@ -69,17 +69,17 @@ export const SECTIONS: AppSection[] = [
     ],
   },
   {
-    paths: ['/settings', '/ai-provider', '/trading', '/uta', '/connectors', '/market-data', '/news-collector'],
+    paths: ['/settings'],
     title: 'Settings',
     Secondary: SettingsCategoryList,
     routes: [
       { path: '/settings', element: <SettingsPage /> },
-      { path: '/ai-provider', element: <AIProviderPage /> },
-      { path: '/trading', element: <TradingPage /> },
-      { path: '/uta/:id', element: <UTADetailPage /> },
-      { path: '/connectors', element: <ConnectorsPage /> },
-      { path: '/market-data', element: <MarketDataPage /> },
-      { path: '/news-collector', element: <NewsCollectorPage /> },
+      { path: '/settings/ai-provider', element: <AIProviderPage /> },
+      { path: '/settings/trading', element: <TradingPage /> },
+      { path: '/settings/uta/:id', element: <UTADetailPage /> },
+      { path: '/settings/connectors', element: <ConnectorsPage /> },
+      { path: '/settings/market-data', element: <MarketDataPage /> },
+      { path: '/settings/news-collector', element: <NewsCollectorPage /> },
     ],
   },
   {
@@ -106,14 +106,30 @@ export const STANDALONE_ROUTES: RouteSpec[] = [
   { path: '/news', element: <NewsPage /> },
 ]
 
+/** Redirect /uta/:id → /settings/uta/:id while preserving the param. */
+function RedirectUta() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/settings/uta/${id ?? ''}`} replace />
+}
+
 /** Old URLs preserved as redirects to their current locations. */
 export const REDIRECT_ROUTES: RouteSpec[] = [
+  // Logs / events / agent-status — moved into Dev
   { path: '/logs', element: <Navigate to="/dev/logs" replace /> },
   { path: '/events', element: <Navigate to="/dev/logs" replace /> },
+  { path: '/agent-status', element: <Navigate to="/dev/logs" replace /> },
+  // Heartbeat / scheduler — folded into Automation
   { path: '/heartbeat', element: <Navigate to="/automation" replace /> },
   { path: '/scheduler', element: <Navigate to="/automation" replace /> },
-  { path: '/agent-status', element: <Navigate to="/dev/logs" replace /> },
-  { path: '/data-sources', element: <Navigate to="/market-data" replace /> },
+  // Settings sub-pages — old flat paths now nested under /settings
+  { path: '/ai-provider', element: <Navigate to="/settings/ai-provider" replace /> },
+  { path: '/trading', element: <Navigate to="/settings/trading" replace /> },
+  { path: '/uta/:id', element: <RedirectUta /> },
+  { path: '/connectors', element: <Navigate to="/settings/connectors" replace /> },
+  { path: '/market-data', element: <Navigate to="/settings/market-data" replace /> },
+  { path: '/news-collector', element: <Navigate to="/settings/news-collector" replace /> },
+  { path: '/data-sources', element: <Navigate to="/settings/market-data" replace /> },
+  // Tools — was an old activity, now folded into Settings
   { path: '/tools', element: <Navigate to="/settings" replace /> },
 ]
 

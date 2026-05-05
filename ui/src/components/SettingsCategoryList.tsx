@@ -3,24 +3,28 @@ import { Link, useLocation } from 'react-router-dom'
 interface CategoryItem {
   /** Display label */
   label: string
-  /** Primary route the link navigates to */
+  /** Canonical route the link navigates to. Active on exact match. */
   to: string
-  /** Active when current pathname matches any of these prefixes (handles sub-routes like /uta/:id) */
-  matches: string[]
+  /** Extra prefixes that also count as "active" (sub-routes like /settings/uta/:id under Trading Accounts). */
+  prefixes?: string[]
 }
 
 const CATEGORIES: CategoryItem[] = [
-  { label: 'General', to: '/settings', matches: ['/settings'] },
-  { label: 'AI Provider', to: '/ai-provider', matches: ['/ai-provider'] },
-  { label: 'Trading Accounts', to: '/trading', matches: ['/trading', '/uta'] },
-  { label: 'Connectors', to: '/connectors', matches: ['/connectors'] },
-  { label: 'Market Data', to: '/market-data', matches: ['/market-data'] },
-  { label: 'News Sources', to: '/news-collector', matches: ['/news-collector'] },
+  { label: 'General', to: '/settings' },
+  { label: 'AI Provider', to: '/settings/ai-provider' },
+  { label: 'Trading Accounts', to: '/settings/trading', prefixes: ['/settings/uta'] },
+  { label: 'Connectors', to: '/settings/connectors' },
+  { label: 'Market Data', to: '/settings/market-data' },
+  { label: 'News Sources', to: '/settings/news-collector' },
 ]
 
 /**
- * Settings secondary sidebar content — flat list of 5 config categories.
- * Each clicks through to the existing route for that category.
+ * Settings sidebar content — flat list of config categories.
+ * Active on exact pathname match for `to`, plus any pathname under `prefixes` (used
+ * for things like Trading Accounts → /settings/uta/:id sub-routes).
+ *
+ * Note: General's `to` is `/settings` and intentionally has no prefixes so it
+ * doesn't light up when other settings sub-pages are active.
  */
 export function SettingsCategoryList() {
   const location = useLocation()
@@ -28,9 +32,9 @@ export function SettingsCategoryList() {
   return (
     <div className="py-0.5">
       {CATEGORIES.map((item) => {
-        const active = item.matches.some(
-          (m) => location.pathname === m || location.pathname.startsWith(m + '/'),
-        )
+        const active =
+          location.pathname === item.to ||
+          (item.prefixes?.some((p) => location.pathname.startsWith(p + '/')) ?? false)
         return (
           <Link
             key={item.to}
