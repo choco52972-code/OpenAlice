@@ -1,15 +1,21 @@
+import type { WheelEvent } from 'react'
 import { useChannels } from '../contexts/ChannelsContext'
 import { useWorkspace } from '../tabs/store'
 import { getView } from '../tabs/registry'
-import { type Tab } from '../tabs/types'
 
 /**
- * The strip of tab buttons above the main content area. Phase 1 surface:
- * click to focus, × to close. No drag, no context menu, no overflow scroll
- * controls — just `overflow-x: auto` if the strip overflows.
+ * The strip of tab buttons above the main content area. Click to focus,
+ * × or middle-click to close. No drag, no context menu yet.
  *
- * Hidden on mobile (`< md`) — phase 1 mobile is single-tab mode where the
- * tab strip would just be noise.
+ * The strip scrolls horizontally when the row of tabs overflows, but the
+ * scrollbar itself is hidden — a thick scrollbar across the full width
+ * just to indicate "there's more" steals editor space and looks ugly.
+ * Vertical mouse-wheel deltas are translated to horizontal scroll so a
+ * regular mouse can still navigate; trackpads pass `deltaX` through
+ * naturally.
+ *
+ * Hidden on mobile (`< md`) — mobile is single-tab mode where the strip
+ * would just be noise.
  */
 export function TabStrip() {
   const { channels } = useChannels()
@@ -25,8 +31,20 @@ export function TabStrip() {
 
   if (tabIds.length === 0) return null
 
+  const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
+    // Trackpads emit horizontal deltas natively; only translate the
+    // mouse-wheel case (deltaX === 0 && deltaY !== 0). Otherwise let the
+    // browser handle the native horizontal scroll.
+    if (e.deltaX === 0 && e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY
+    }
+  }
+
   return (
-    <div className="hidden md:flex shrink-0 h-9 bg-bg-secondary border-b border-border overflow-x-auto">
+    <div
+      onWheel={handleWheel}
+      className="scrollbar-hide hidden md:flex shrink-0 h-9 bg-bg-secondary border-b border-border overflow-x-auto"
+    >
       {tabIds.map((id) => {
         const tab = tabsMap[id]
         if (!tab) return null
