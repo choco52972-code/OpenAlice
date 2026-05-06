@@ -349,7 +349,7 @@ interface PositionWithAccount extends Position {
 /** True when the position carries derivative-specific context worth showing. */
 function isDerivative(p: Position): boolean {
   const t = p.contract.secType
-  if (t === 'FUT' || t === 'OPT' || t === 'FOP') return true
+  if (t === 'FUT' || t === 'OPT' || t === 'FOP' || t === 'CRYPTO_PERP') return true
   return p.side === 'short'
 }
 
@@ -368,6 +368,9 @@ function contractDisplay(p: Position): { name: string; tag?: string } {
   if (t === 'FUT') {
     const expiry = c.lastTradeDateOrContractMonth
     return { name: expiry ? `${sym} ${expiry}` : sym, tag: 'fut' }
+  }
+  if (t === 'CRYPTO_PERP') {
+    return { name: sym, tag: 'perp' }
   }
   if (t === 'CRYPTO') {
     return { name: sym, tag: 'spot' }

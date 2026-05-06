@@ -1,6 +1,25 @@
 import { type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { type Page, ROUTES } from '../App'
+import { type Page } from '../App'
+import { useWorkspace } from '../tabs/store'
+import type { ActivitySection, ViewSpec } from '../tabs/types'
+
+/**
+ * Map ActivityBar page enum (visual layout grouping) to the ActivitySection
+ * used by the workspace store. Names are 1:1.
+ */
+function activitySectionFor(page: Page): ActivitySection {
+  switch (page) {
+    case 'chat':           return 'chat'
+    case 'trading-as-git': return 'trading-as-git'
+    case 'settings':       return 'settings'
+    case 'dev':            return 'dev'
+    case 'market':         return 'market'
+    case 'portfolio':      return 'portfolio'
+    case 'automation':     return 'automation'
+    case 'news':           return 'news'
+    case 'diary':          return 'diary'
+  }
+}
 
 interface ActivityBarProps {
   open: boolean
@@ -13,6 +32,20 @@ interface NavLeaf {
   page: Page
   label: string
   icon: (active: boolean) => ReactNode
+  /**
+   * What tab opens when this ActivityBar item is clicked.
+   *
+   * - **Set**: clicking the icon both reveals the sidebar AND opens (or
+   *   focuses) this tab. Used for activities with a meaningful default
+   *   landing page — e.g. Portfolio's Overview, Diary, News, Automation.
+   * - **Omitted**: sidebar-only activity. Click reveals the sidebar; tabs
+   *   are created from sidebar interactions. Used when there's no canonical
+   *   "all of X" view (Chat, Settings, Dev) or no tab at all (Trading-as-Git).
+   *
+   * Same-section re-click always collapses the sidebar regardless of this
+   * field; the focused tab isn't touched on collapse.
+   */
+  defaultTab?: ViewSpec
 }
 
 interface NavSection {
@@ -36,6 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
       {
         page: 'portfolio',
         label: 'Portfolio',
+        defaultTab: { kind: 'portfolio', params: {} },
         icon: (active) => (
           <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -74,6 +108,7 @@ const NAV_SECTIONS: NavSection[] = [
       {
         page: 'news',
         label: 'News',
+        defaultTab: { kind: 'news', params: {} },
         icon: (active) => (
           <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9h4" />
@@ -86,6 +121,7 @@ const NAV_SECTIONS: NavSection[] = [
       {
         page: 'diary',
         label: 'Diary',
+        defaultTab: { kind: 'diary', params: {} },
         icon: (active) => (
           <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -101,6 +137,7 @@ const NAV_SECTIONS: NavSection[] = [
       {
         page: 'automation',
         label: 'Automation',
+        defaultTab: { kind: 'automation', params: { section: 'flow' } },
         icon: (active) => (
           <svg width="18" height="18" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -138,34 +175,15 @@ const NAV_SECTIONS: NavSection[] = [
 
 // ==================== Helpers ====================
 
-/**
- * Routes that live inside the Settings sidebar. The Settings activity-bar
- * icon highlights as active for any pathname under /settings.
- */
-const SETTINGS_GROUPED_ROUTES = ['/settings']
-
-export function isSettingsGroupedRoute(pathname: string): boolean {
-  return SETTINGS_GROUPED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + '/'))
-}
-
-/** Derive active page from current URL path */
-function pathToPage(pathname: string): Page | null {
-  for (const [page, path] of Object.entries(ROUTES) as [Page, string][]) {
-    if (path === pathname) return page
-    // Match root path for chat
-    if (page === 'chat' && pathname === '/') return 'chat'
-  }
-  return null
-}
-
 /** Style for active indicator */
 const INDICATOR_STYLE = { background: '#58a6ff' }
 
 // ==================== ActivityBar ====================
 
 export function ActivityBar({ open, onClose }: ActivityBarProps) {
-  const location = useLocation()
-  const currentPage = pathToPage(location.pathname)
+  const selectedSidebar = useWorkspace((state) => state.selectedSidebar)
+  const setSidebar = useWorkspace((state) => state.setSidebar)
+  const openOrFocus = useWorkspace((state) => state.openOrFocus)
 
   return (
     <>
@@ -210,16 +228,29 @@ export function ActivityBar({ open, onClose }: ActivityBarProps) {
               )}
               <div className="flex flex-col gap-0.5">
                 {section.items.map((item) => {
-                  const isActive = item.page === 'settings'
-                    ? isSettingsGroupedRoute(location.pathname)
-                    : item.page === 'dev'
-                    ? location.pathname === '/dev' || location.pathname.startsWith('/dev/')
-                    : currentPage === item.page
+                  const sec = activitySectionFor(item.page)
+                  const isActive = selectedSidebar === sec
+                  const handleClick = () => {
+                    onClose()
+                    if (selectedSidebar === sec) {
+                      // Same section re-clicked: toggle sidebar off. Don't
+                      // touch the focused tab — collapsing the sidebar
+                      // shouldn't change what's in the editor.
+                      setSidebar(null)
+                    } else {
+                      setSidebar(sec)
+                      // Activities with a meaningful default landing (e.g.
+                      // Portfolio overview) jump straight to it. Sidebar-only
+                      // activities (Chat, Settings, Trading-as-Git, …) leave
+                      // tab focus alone — user picks from the sidebar.
+                      if (item.defaultTab) openOrFocus(item.defaultTab)
+                    }
+                  }
                   return (
-                    <Link
+                    <button
                       key={item.page}
-                      to={ROUTES[item.page]}
-                      onClick={onClose}
+                      type="button"
+                      onClick={handleClick}
                       title={item.label}
                       className={`relative flex items-center gap-3 px-3 py-2 md:px-0 md:py-2.5 md:rounded-none md:justify-center rounded-lg text-sm transition-colors text-left ${
                         isActive
@@ -235,7 +266,7 @@ export function ActivityBar({ open, onClose }: ActivityBarProps) {
                       />
                       <span className={`flex items-center justify-center w-5 h-5 ${isActive ? 'md:text-text' : ''}`}>{item.icon(isActive)}</span>
                       <span className="md:hidden">{item.label}</span>
-                    </Link>
+                    </button>
                   )
                 })}
               </div>

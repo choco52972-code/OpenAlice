@@ -30,7 +30,7 @@ export function decodeSymbol(encoded: string): string {
 export function ccxtTypeToSecType(type: string): string {
   switch (type) {
     case 'spot': return 'CRYPTO'
-    case 'swap': return 'CRYPTO'  // perpetual swap is still crypto
+    case 'swap': return 'CRYPTO_PERP'
     case 'future': return 'FUT'
     case 'option': return 'OPT'
     default: return 'CRYPTO'

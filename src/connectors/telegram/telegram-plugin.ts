@@ -17,6 +17,7 @@ import type { UTAManager } from '../../domain/trading/index.js'
 import type { Operation } from '../../domain/trading/git/types.js'
 import { getOperationSymbol } from '../../domain/trading/git/types.js'
 import { UNSET_DECIMAL } from '@traderalice/ibkr'
+import Decimal from 'decimal.js'
 
 /** Build a display label for a profile. */
 function profileLabel(name: string, profile: { model: string }): string {
@@ -564,6 +565,11 @@ export class TelegramPlugin implements Plugin {
         return `CANCEL order ${op.orderId}`
       case 'syncOrders':
         return 'SYNC orders'
+      case 'reconcileBalance': {
+        const delta = new Decimal(op.quantityDelta)
+        const dir = delta.gte(0) ? 'OBSERVED' : 'RELEASED'
+        return `${dir} ${symbol} ${delta.abs().toFixed()} @${op.markPrice}`
+      }
     }
   }
 

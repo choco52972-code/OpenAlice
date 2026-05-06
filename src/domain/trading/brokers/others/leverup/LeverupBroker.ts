@@ -190,7 +190,7 @@ export class LeverupBroker implements IBroker {
   private pairToContract(pair: LeverupPair): Contract {
     const c = new Contract()
     c.symbol = pair.base
-    c.secType = 'CRYPTO'  // LeverUp synthesizes everything (forex, stocks) as crypto-perps
+    c.secType = 'CRYPTO_PERP'  // LeverUp synthesizes everything (forex, stocks) as crypto-perps
     c.exchange = 'LEVERUP'
     c.currency = pair.quote
     c.localSymbol = pair.symbol
@@ -512,7 +512,7 @@ export class LeverupBroker implements IBroker {
 
   getCapabilities(): AccountCapabilities {
     return {
-      supportedSecTypes: ['CRYPTO'],
+      supportedSecTypes: ['CRYPTO_PERP'],
       supportedOrderTypes: ['MKT'],
     }
   }
@@ -532,7 +532,7 @@ export class LeverupBroker implements IBroker {
     const c = new Contract()
     c.localSymbol = nativeKey
     c.symbol = nativeKey.split('/')[0] ?? nativeKey
-    c.secType = 'CRYPTO'
+    c.secType = 'CRYPTO_PERP'
     c.exchange = 'LEVERUP'
     return c
   }

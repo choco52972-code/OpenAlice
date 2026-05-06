@@ -108,15 +108,9 @@ export function TradeableContractsPanel({ symbol, assetClass }: Props) {
 function instrumentTier(hit: ContractSearchHit): number {
   const c = hit.contract
   const sec = (c.secType ?? '').toUpperCase()
-  const local = (c.localSymbol ?? c.aliceId ?? '') as string
   if (sec === 'STK') return 0
-  if (sec === 'CRYPTO') {
-    // CCXT marks both spot and perpetual swaps as CRYPTO. Spot has no `:`
-    // settlement-currency suffix; perpetuals have `:` but no trailing
-    // `-YYMMDD` expiry.
-    if (!local.includes(':')) return 1
-    return 2
-  }
+  if (sec === 'CRYPTO') return 1
+  if (sec === 'CRYPTO_PERP') return 2
   if (sec === 'FUT') return 3
   if (sec === 'OPT') return 4
   return 5

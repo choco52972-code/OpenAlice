@@ -151,7 +151,7 @@ function makeContract(symbol: string): Contract {
   const c = new Contract()
   c.localSymbol = symbol
   c.symbol = symbol.split('/')[0]
-  c.secType = 'CRYPTO'
+  c.secType = 'CRYPTO_PERP'
   c.exchange = 'LEVERUP'
   c.currency = symbol.split('/')[1] ?? 'USD'
   return c
@@ -208,10 +208,10 @@ describe('LeverupBroker — searchContracts', () => {
     expect(await b.searchContracts('')).toHaveLength(0)
   })
 
-  it('marks pairs with secType=CRYPTO and exchange=LEVERUP', async () => {
+  it('marks pairs with secType=CRYPTO_PERP and exchange=LEVERUP', async () => {
     const b = await makeInitializedBroker()
     const [first] = await b.searchContracts('BTC')
-    expect(first.contract.secType).toBe('CRYPTO')
+    expect(first.contract.secType).toBe('CRYPTO_PERP')
     expect(first.contract.exchange).toBe('LEVERUP')
   })
 })
@@ -471,10 +471,10 @@ describe('LeverupBroker — getOrder tracks submitted orders', () => {
 })
 
 describe('LeverupBroker — capabilities', () => {
-  it('only advertises CRYPTO + MKT', async () => {
+  it('only advertises CRYPTO_PERP + MKT', async () => {
     const b = await makeInitializedBroker()
     const caps = b.getCapabilities()
-    expect(caps.supportedSecTypes).toEqual(['CRYPTO'])
+    expect(caps.supportedSecTypes).toEqual(['CRYPTO_PERP'])
     expect(caps.supportedOrderTypes).toEqual(['MKT'])
   })
 

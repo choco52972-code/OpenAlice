@@ -185,6 +185,76 @@ export class TradingGit implements ITradingGit {
     return { hash, message, operationCount: operations.length }
   }
 
+  /**
+   * Append a synthetic reconcileBalance commit to the log without going
+   * through staging/push. Used by UTA when broker-reported balance differs
+   * from what the order log projects (first-sight bootstrap, external
+   * deposit/withdraw, staking reward, off-platform trade) — record the
+   * delta as a virtual market trade at observed price so the cost-basis
+   * pipeline naturally folds it in.
+   *
+   * The caller passes the post-reconcile GitState (typically built from
+   * the in-flight `getPositions` data) to avoid recursing back through
+   * `getGitState` → `broker.getPositions()`.
+   */
+  async recordReconcile(params: {
+    aliceId: string
+    quantityDelta: Decimal
+    markPrice: Decimal
+    stateAfter: GitState
+    message?: string
+  }): Promise<CommitHash> {
+    const { aliceId, quantityDelta, markPrice, stateAfter } = params
+    const timestamp = new Date().toISOString()
+
+    const qtyStr = quantityDelta.toFixed()
+    const priceStr = markPrice.toFixed()
+
+    const operation: Operation = {
+      action: 'reconcileBalance',
+      aliceId,
+      quantityDelta: qtyStr,
+      markPrice: priceStr,
+    }
+
+    const result: OperationResult = {
+      action: 'reconcileBalance',
+      success: true,
+      status: 'filled',
+      filledQty: quantityDelta.abs().toFixed(),
+      filledPrice: priceStr,
+    }
+
+    const direction = quantityDelta.gte(0) ? 'observed' : 'released'
+    const message = params.message
+      ?? `reconcile: ${direction} ${quantityDelta.abs().toFixed()} ${aliceId} @ ${priceStr}`
+
+    const hash = generateCommitHash({
+      message,
+      operations: [operation],
+      timestamp,
+      parentHash: this.head,
+    })
+
+    const commit: GitCommit = {
+      hash,
+      parentHash: this.head,
+      message,
+      operations: [operation],
+      results: [result],
+      stateAfter,
+      timestamp,
+      round: this.currentRound,
+    }
+
+    this.commits.push(commit)
+    this.head = hash
+
+    await this.config.onCommit?.(this.exportState())
+
+    return hash
+  }
+
   // ==================== git log / show / status ====================
 
   log(options: { limit?: number; symbol?: string } = {}): CommitLogEntry[] {
@@ -277,6 +347,12 @@ export class TradingGit implements ITradingGit {
           : result?.execution?.price ? ` @${result.execution.price}` : ''
         const qty = result?.filledQty ? ` (${result.filledQty} filled)` : ''
         return `synced → ${status}${price}${qty}`
+      }
+
+      case 'reconcileBalance': {
+        const delta = new Decimal(op.quantityDelta)
+        const direction = delta.gte(0) ? 'observed' : 'released'
+        return `${direction} ${delta.abs().toFixed()} @${op.markPrice}`
       }
     }
   }
