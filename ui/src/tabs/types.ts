@@ -24,6 +24,7 @@ export type ViewSpec =
   | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'trading' | 'connectors' | 'market-data' | 'news-collector' } }
   | { kind: 'uta-detail';     params: { id: string } }
   | { kind: 'dev';            params: { tab: 'connectors' | 'tools' | 'sessions' | 'snapshots' | 'logs' } }
+  | { kind: 'notifications-inbox'; params: Record<string, never> }
 
 export type ViewKind = ViewSpec['kind']
 
@@ -47,7 +48,6 @@ export type ActivitySection =
   | 'automation'
   | 'news'
   | 'diary'
-  | 'notifications'
 
 export interface Tab {
   id: string

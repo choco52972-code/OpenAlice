@@ -17,6 +17,7 @@ import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
 import { DevPage } from '../pages/DevPage'
+import { NotificationsInboxPage } from '../pages/NotificationsInboxPage'
 
 /**
  * Central registry mapping each ViewKind to its render component and URL
@@ -170,6 +171,13 @@ const devModule: ViewModule<'dev'> = {
   Component: DevPage,
 }
 
+const notificationsInboxModule: ViewModule<'notifications-inbox'> = {
+  kind: 'notifications-inbox',
+  title: () => 'Notifications',
+  toUrl: () => '/notifications',
+  Component: NotificationsInboxPage,
+}
+
 // ==================== Aggregate ====================
 
 export const VIEWS = {
@@ -183,6 +191,7 @@ export const VIEWS = {
   settings: settingsModule,
   'uta-detail': utaDetailModule,
   dev: devModule,
+  'notifications-inbox': notificationsInboxModule,
 } as const satisfies { [K in ViewKind]: ViewModule<K> }
 
 /** Untyped lookup — narrow at the call site by inspecting `spec.kind`. */

@@ -55,6 +55,9 @@ export function UrlAdopter() {
         <Route path="/dev" element={<Navigate to="/dev/connectors" replace />} />
         <Route path="/dev/:tab" element={<AdoptDev />} />
 
+        {/* Notifications inbox */}
+        <Route path="/notifications" element={<AdoptStatic spec={{ kind: 'notifications-inbox', params: {} }} />} />
+
         {/* Legacy redirects — preserved from sections.tsx */}
         <Route path="/logs" element={<Navigate to="/dev/logs" replace />} />
         <Route path="/events" element={<Navigate to="/dev/logs" replace />} />

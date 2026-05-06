@@ -16,7 +16,6 @@ import { useWorkspace } from './tabs/store'
 export type Page =
   | 'chat' | 'diary' | 'portfolio' | 'news' | 'automation' | 'market'
   | 'trading-as-git'
-  | 'notifications'
   | 'settings' | 'dev'
 
 /** Track whether we're at a desktop viewport (md+ in Tailwind = ≥768px). */
