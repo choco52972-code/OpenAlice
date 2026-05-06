@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api, type EventLogEntry, type ToolCallRecord } from '../api'
-import { useSSE } from '../hooks/useSSE'
 
 // ==================== Helpers ====================
 
@@ -86,27 +85,17 @@ function EventLogSection() {
     }
   }, [entries])
 
-  // SSE for real-time events — only affects page 1
-  useSSE({
-    url: '/api/events/stream',
-    onMessage: (entry: EventLogEntry) => {
-      // Always track new types
-      setTypes((prev) => {
-        if (prev.includes(entry.type)) return prev
-        return [...prev, entry.type].sort()
-      })
-      // Increment total
-      setTotal((prev) => prev + 1)
-      // Only prepend to visible list when on page 1 and matching filter
-      if (page === 1) {
-        const matchesFilter = !typeFilter || entry.type === typeFilter
-        if (matchesFilter) {
-          setEntries((prev) => [entry, ...prev].slice(0, EVENT_PAGE_SIZE))
-        }
-      }
-    },
-    enabled: !paused,
-  })
+  // Live updates via polling — refetch page 1 every 3s while not paused.
+  // Older pages don't poll (user is browsing history; not jumping back).
+  // Matches ToolCallLogSection's pattern below; the events log doesn't
+  // need sub-second freshness — a 3s gap on a debug screen is fine.
+  useEffect(() => {
+    if (paused || page !== 1) return
+    const interval = setInterval(() => {
+      fetchPage(1, typeFilter || undefined)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [paused, page, typeFilter, fetchPage])
 
   // Type filter change → reset to page 1
   const handleTypeChange = useCallback((type: string) => {
