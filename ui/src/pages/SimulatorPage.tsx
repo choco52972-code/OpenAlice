@@ -92,7 +92,6 @@ export function SimulatorPage() {
   return (
     <div className="px-4 md:px-6 py-5 max-w-[960px] space-y-5">
       <CreateSimulatorSection
-        existingIds={utas.map(u => u.id)}
         onCreated={async (newId) => {
           const list = await refreshUtaList()
           if (list.some(u => u.id === newId)) setSelected(newId)
@@ -158,31 +157,16 @@ export function SimulatorPage() {
 
 // ==================== Create Simulator UTA ====================
 
-function CreateSimulatorSection({ existingIds, onCreated }: {
-  existingIds: string[]
+function CreateSimulatorSection({ onCreated }: {
   onCreated: (id: string) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
-  const [id, setId] = useState('')
+  const [name, setName] = useState('')
   const [cash, setCash] = useState('100000')
   const [busy, setBusy] = useState(false)
   const toast = useToast()
 
-  // Default id: simulator, simulator-2, simulator-3, …
-  const defaultId = useMemo(() => {
-    if (!existingIds.includes('simulator')) return 'simulator'
-    let i = 2
-    while (existingIds.includes(`simulator-${i}`)) i++
-    return `simulator-${i}`
-  }, [existingIds])
-
   const submit = async () => {
-    const finalId = (id || defaultId).trim()
-    if (!finalId) return
-    if (existingIds.includes(finalId)) {
-      toast.error(`Account "${finalId}" already exists`)
-      return
-    }
     const cashNum = Number(cash)
     if (!Number.isFinite(cashNum) || cashNum < 0) {
       toast.error('Cash must be a non-negative number')
@@ -190,22 +174,23 @@ function CreateSimulatorSection({ existingIds, onCreated }: {
     }
     setBusy(true)
     try {
-      await api.trading.upsertUTA({
-        id: finalId,
-        label: finalId,
+      const finalLabel = name.trim() || 'simulator'
+      // Server derives id from preset.fingerprintFields (= ['_instanceId']
+      // for Mock); a fresh _instanceId is minted server-side when missing,
+      // so each create lands on a distinct id.
+      const created = await api.trading.createUTA({
+        label: finalLabel,
         presetId: 'mock-simulator',
         enabled: true,
         guards: [],
         presetConfig: { cash: cashNum },
       })
-      // Engine load: PUT skips reconnect for brand-new accounts (no
-      // wasEnabled→nowEnabled transition), so kick it ourselves.
-      await api.trading.reconnectUTA(finalId).catch(() => {})
-      toast.success(`Created ${finalId}`)
+      await api.trading.reconnectUTA(created.id).catch(() => {})
+      toast.success(`Created ${created.label} (${created.id})`)
       setOpen(false)
-      setId('')
+      setName('')
       setCash('100000')
-      await onCreated(finalId)
+      await onCreated(created.id)
     } catch (err) {
       toast.error(`Create failed: ${err instanceof Error ? err.message : err}`)
     } finally {
@@ -231,10 +216,10 @@ function CreateSimulatorSection({ existingIds, onCreated }: {
     >
       <div className="flex items-center gap-2 flex-wrap">
         <input
-          className="px-2 py-1 bg-bg text-text border border-border rounded font-mono text-xs outline-none transition-colors focus:border-accent w-44"
-          placeholder={defaultId}
-          value={id}
-          onChange={(e) => setId(e.target.value.trim())}
+          className="px-2 py-1 bg-bg text-text border border-border rounded text-sm outline-none transition-colors focus:border-accent w-48"
+          placeholder="name (e.g. simulator)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
         />
         <input
           className="px-2 py-1 bg-bg text-text border border-border rounded font-mono text-xs outline-none transition-colors focus:border-accent w-32"
@@ -247,7 +232,7 @@ function CreateSimulatorSection({ existingIds, onCreated }: {
         </button>
         <button
           disabled={busy}
-          onClick={() => { setOpen(false); setId(''); setCash('100000') }}
+          onClick={() => { setOpen(false); setName(''); setCash('100000') }}
           className="btn-secondary-sm"
         >
           Cancel
