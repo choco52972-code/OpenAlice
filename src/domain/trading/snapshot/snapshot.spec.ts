@@ -10,8 +10,6 @@ import type { UnifiedTradingAccountOptions } from '../UnifiedTradingAccount.js'
 import { MockBroker, makeContract, makePosition, makeOpenOrder } from '../brokers/mock/index.js'
 import { UTAManager } from '../uta-manager.js'
 import { createEventLog, type EventLog } from '../../../core/event-log.js'
-import { createListenerRegistry, type ListenerRegistry } from '../../../core/listener-registry.js'
-import { createCronEngine, type CronEngine } from '../../../task/cron/engine.js'
 import { buildSnapshot } from './builder.js'
 import { createSnapshotStore, type SnapshotStore } from './store.js'
 import { createSnapshotService, type SnapshotService } from './service.js'
@@ -448,21 +446,10 @@ describe('Snapshot Service', () => {
 // ==================== Scheduler Tests ====================
 
 describe('Snapshot Scheduler', () => {
-  let eventLog: EventLog
-  let listenerRegistry: ListenerRegistry
-  let cronEngine: CronEngine
   let scheduler: SnapshotScheduler
   let mockService: SnapshotService
 
-  beforeEach(async () => {
-    const logPath = tempPath('jsonl')
-    const storePath = tempPath('json')
-    eventLog = await createEventLog({ logPath })
-    listenerRegistry = createListenerRegistry(eventLog)
-    await listenerRegistry.start()
-    cronEngine = createCronEngine({ registry: listenerRegistry, storePath })
-    await cronEngine.start()
-
+  beforeEach(() => {
     mockService = {
       takeSnapshot: vi.fn(async () => null),
       takeAllSnapshots: vi.fn(async () => {}),
@@ -472,108 +459,76 @@ describe('Snapshot Scheduler', () => {
 
     scheduler = createSnapshotScheduler({
       snapshotService: mockService,
-      cronEngine,
-      registry: listenerRegistry,
       config: { enabled: true, every: '15m' },
     })
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     scheduler?.stop()
-    cronEngine.stop()
-    await listenerRegistry.stop()
-    await eventLog._resetForTest()
   })
 
-  // #26
-  it('registers __snapshot__ cron job on start', async () => {
+  // #26: runNow invokes takeAllSnapshots
+  it('runNow invokes takeAllSnapshots("scheduled")', async () => {
     await scheduler.start()
-
-    const jobs = cronEngine.list()
-    const snapshotJob = jobs.find(j => j.name === '__snapshot__')
-    expect(snapshotJob).toBeDefined()
-    expect(snapshotJob!.enabled).toBe(true)
-  })
-
-  // #27
-  it('reuses existing job on repeated start (idempotent)', async () => {
-    await scheduler.start()
-    const jobsBefore = cronEngine.list().filter(j => j.name === '__snapshot__')
-
-    await scheduler.start()
-    const jobsAfter = cronEngine.list().filter(j => j.name === '__snapshot__')
-
-    expect(jobsBefore).toHaveLength(1)
-    expect(jobsAfter).toHaveLength(1)
-    expect(jobsBefore[0].id).toBe(jobsAfter[0].id)
-  })
-
-  // #28
-  it('fires takeAllSnapshots on cron.fire event', async () => {
-    await scheduler.start()
-
-    // Trigger the cron job manually
-    const job = cronEngine.list().find(j => j.name === '__snapshot__')!
-    await cronEngine.runNow(job.id)
-
-    // Give the async handler time to complete
-    await new Promise(r => setTimeout(r, 50))
-
+    await scheduler.runNow()
     expect(mockService.takeAllSnapshots).toHaveBeenCalledWith('scheduled')
   })
 
-  // #29
-  it('ignores cron.fire for other jobs', async () => {
+  // #27: idempotent start
+  it('start is idempotent — multiple calls do not double-fire', async () => {
     await scheduler.start()
-
-    // Create a different job and fire it
-    const otherId = await cronEngine.add({
-      name: 'other-job',
-      schedule: { kind: 'every', every: '1h' },
-      payload: '',
-    })
-    await cronEngine.runNow(otherId)
-
-    await new Promise(r => setTimeout(r, 50))
-
-    expect(mockService.takeAllSnapshots).not.toHaveBeenCalled()
-  })
-
-  // #30
-  it('processing lock prevents concurrent fires', async () => {
-    // Make takeAllSnapshots slow
-    let resolveFirst: () => void
-    const firstCall = new Promise<void>(r => { resolveFirst = r })
-    ;(mockService.takeAllSnapshots as any).mockImplementationOnce(async () => {
-      await firstCall
-    })
-
     await scheduler.start()
-    const job = cronEngine.list().find(j => j.name === '__snapshot__')!
-
-    // Fire twice quickly
-    await cronEngine.runNow(job.id)
-    await new Promise(r => setTimeout(r, 10))
-    await cronEngine.runNow(job.id)
-    await new Promise(r => setTimeout(r, 10))
-
-    // Second fire should be skipped (processing=true)
-    resolveFirst!()
-    await new Promise(r => setTimeout(r, 50))
-
+    await scheduler.runNow()
     expect(mockService.takeAllSnapshots).toHaveBeenCalledTimes(1)
   })
 
-  // #31
-  it('stop() unsubscribes from events', async () => {
+  // #28: disabled scheduler doesn't fire on its own (but runNow still works)
+  it('disabled config: pump does not auto-fire, runNow still works', async () => {
+    scheduler = createSnapshotScheduler({
+      snapshotService: mockService,
+      config: { enabled: false, every: '15m' },
+    })
+    await scheduler.start()
+    // No auto-fire — runNow explicitly invokes
+    await scheduler.runNow()
+    expect(mockService.takeAllSnapshots).toHaveBeenCalledTimes(1)
+  })
+
+  // #29: serial guard prevents concurrent fires
+  it('processing lock prevents concurrent fires', async () => {
+    let resolveFirst: () => void = () => {}
+    const firstCall = new Promise<void>(r => { resolveFirst = r })
+    ;(mockService.takeAllSnapshots as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(async () => { await firstCall })
+
+    await scheduler.start()
+    // Kick off two concurrent runNow calls; the second should await the first.
+    const r1 = scheduler.runNow()
+    const r2 = scheduler.runNow()
+    resolveFirst()
+    await Promise.all([r1, r2])
+    // Only one invocation — second was coalesced into the in-flight one
+    expect(mockService.takeAllSnapshots).toHaveBeenCalledTimes(1)
+  })
+
+  // #30: stop terminates the pump
+  it('stop() prevents future runNow from firing', async () => {
     await scheduler.start()
     scheduler.stop()
-
-    const job = cronEngine.list().find(j => j.name === '__snapshot__')!
-    await cronEngine.runNow(job.id)
-    await new Promise(r => setTimeout(r, 50))
-
+    await scheduler.runNow()
     expect(mockService.takeAllSnapshots).not.toHaveBeenCalled()
+  })
+
+  // #31: snapshot service errors are swallowed at the pump level (not fatal)
+  it('takeAllSnapshots error does not crash the scheduler', async () => {
+    ;(mockService.takeAllSnapshots as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('takeAll fail'))
+
+    await scheduler.start()
+    await scheduler.runNow()  // doesn't throw
+    // pump still functional
+    await scheduler.runNow()
+    expect(mockService.takeAllSnapshots).toHaveBeenCalledTimes(2)
   })
 })
 
