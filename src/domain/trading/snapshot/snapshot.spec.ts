@@ -103,6 +103,39 @@ describe('Snapshot Builder', () => {
     expect(typeof snap!.positions[0].avgCost).toBe('string')
   })
 
+  // #3b — OPT/FOP metadata round-trips into the snapshot so the UI can
+  // render strike / right / multiplier badges from a persisted snapshot
+  // without needing the broker contract registry to be in-memory.
+  it('OPT positions carry secType + multiplier + strike + right + expiry', async () => {
+    const optContract = makeContract({ symbol: 'SPY', aliceId: 'mock-paper|SPY-OPT' })
+    optContract.secType = 'OPT'
+    optContract.lastTradeDateOrContractMonth = '20260117'
+    optContract.strike = 580
+    optContract.right = 'P'
+    optContract.multiplier = '100'
+    broker.setPositions([makePosition({ contract: optContract, multiplier: '100' })])
+
+    const snap = await buildSnapshot(uta, 'manual')
+    expect(snap).not.toBeNull()
+    const p = snap!.positions[0]
+    expect(p.secType).toBe('OPT')
+    expect(p.multiplier).toBe('100')
+    expect(p.strike).toBe(580)
+    expect(p.right).toBe('P')
+    expect(p.expiry).toBe('20260117')
+  })
+
+  // STK positions skip the multiplier field (defaults to '1' — would be
+  // noise in every snapshot row).
+  it('STK positions omit multiplier when multiplier=1', async () => {
+    broker.setPositions([makePosition()])  // default STK, multiplier: '1'
+    const snap = await buildSnapshot(uta, 'manual')
+    expect(snap).not.toBeNull()
+    expect(snap!.positions[0]).not.toHaveProperty('multiplier')
+    expect(snap!.positions[0]).not.toHaveProperty('strike')
+    expect(snap!.positions[0]).not.toHaveProperty('right')
+  })
+
   // #4
   it('only includes Submitted/PreSubmitted orders', async () => {
     const contract = makeContract({ symbol: 'AAPL' })

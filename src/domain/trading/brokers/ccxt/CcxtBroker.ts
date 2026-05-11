@@ -25,6 +25,7 @@ import {
   type TpSlParams,
 } from '../types.js'
 import '../../contract-ext.js'
+import { aggregateAccountFromPositions } from '../../position-math.js'
 import { buildPosition } from '../contract-builder.js'
 import { CCXT_CREDENTIAL_FIELDS, type CcxtBrokerConfig, type CcxtMarket, type FundingRate, type OrderBook, type OrderBookLevel } from './ccxt-types.js'
 import { MAX_INIT_RETRIES, INIT_RETRY_BASE_MS } from './ccxt-types.js'
@@ -699,7 +700,7 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
       // snapshot that may not update between funding/settlement cycles).
       let unrealizedPnL = new Decimal(0)
       let realizedPnL = new Decimal(0)
-      let totalPositionValue = new Decimal(0)
+      const aggregateInputs: Array<{ side: 'long' | 'short'; marketValue: string }> = []
       for (const p of rawPositions) {
         unrealizedPnL = unrealizedPnL.plus(new Decimal(String(p.unrealizedPnl ?? 0)))
         realizedPnL = realizedPnL.plus(new Decimal(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0)))
@@ -708,7 +709,8 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
         const contractSize = new Decimal(String(p.contractSize ?? 1))
         const quantity = contracts.mul(contractSize)
         const markPrice = new Decimal(String(p.markPrice ?? 0))
-        totalPositionValue = totalPositionValue.plus(quantity.mul(markPrice))
+        const side: 'long' | 'short' = p.side === 'short' ? 'short' : 'long'
+        aggregateInputs.push({ side, marketValue: quantity.mul(markPrice).toString() })
       }
 
       // Fold spot holdings (BTC/ETH/etc balances) into position value.
@@ -716,10 +718,10 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
       // an asset — so they count toward netLiquidation, not totalCashValue.
       const spotHoldings = await this.fetchSpotHoldings(balance)
       for (const sp of spotHoldings) {
-        totalPositionValue = totalPositionValue.plus(new Decimal(sp.marketValue))
+        aggregateInputs.push({ side: 'long', marketValue: sp.marketValue })
       }
 
-      const netLiquidation = free.plus(totalPositionValue)
+      const { netLiquidation } = aggregateAccountFromPositions(free, aggregateInputs)
 
       return {
         baseCurrency: 'USD',
