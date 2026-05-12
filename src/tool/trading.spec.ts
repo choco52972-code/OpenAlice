@@ -251,3 +251,50 @@ describe('createTradingTools — getOrders summarization', () => {
     expect(result['mock-paper|ETH'].orders).toHaveLength(1)
   })
 })
+
+// ==================== placeOrder schema (AI ergonomics) ====================
+
+describe('placeOrder inputSchema', () => {
+  // LLMs frequently emit "" for fields they don't intend to set rather than
+  // omitting the key. Without empty-string tolerance, every optional numeric
+  // field rejects with "must be a positive numeric string" and the whole MKT
+  // call fails at the schema gate (the cashQty/lmtPrice/auxPrice cluster bug
+  // reported 2026-05-12).
+  it('treats empty-string optional numeric fields as omitted', () => {
+    const broker = new MockBroker({ id: 'mock-paper' })
+    const tools = createTradingTools(makeManager(broker))
+
+    const result = (tools.placeOrder.inputSchema as any).safeParse({
+      source: 'mock-paper',
+      aliceId: 'mock-paper|AAPL',
+      action: 'BUY',
+      orderType: 'MKT',
+      totalQuantity: '0.01',
+      cashQty: '',
+      lmtPrice: '',
+      auxPrice: '',
+      trailStopPrice: '',
+      trailingPercent: '',
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data.cashQty).toBeUndefined()
+    expect(result.data.lmtPrice).toBeUndefined()
+    expect(result.data.totalQuantity).toBe('0.01')
+  })
+
+  it('still rejects non-empty invalid numerics', () => {
+    const broker = new MockBroker({ id: 'mock-paper' })
+    const tools = createTradingTools(makeManager(broker))
+
+    const result = (tools.placeOrder.inputSchema as any).safeParse({
+      source: 'mock-paper',
+      aliceId: 'mock-paper|AAPL',
+      action: 'BUY',
+      orderType: 'MKT',
+      totalQuantity: '0',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
