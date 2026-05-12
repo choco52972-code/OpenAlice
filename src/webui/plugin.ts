@@ -30,6 +30,10 @@ import { createNotificationsRoutes } from './routes/notifications.js'
 import { createVersionRoutes } from './routes/version.js'
 import { mountOpenTypeBB } from '../server/opentypebb.js'
 import { buildSDKCredentials } from '../domain/market-data/credential-map.js'
+import { createWorkspaceService, type WorkspaceService } from '../workspaces/service.js'
+import { createWorkspaceRoutes } from './routes/workspaces.js'
+import { attachWorkspacesWS, type AttachedWS } from './workspaces-ws.js'
+import type { Server as HttpServer } from 'node:http'
 
 export interface WebConfig {
   port: number
@@ -42,6 +46,8 @@ export class WebPlugin implements Plugin {
   private sseByChannel = new Map<string, Map<string, SSEClient>>()
   private unregisterConnector?: () => void
   private ingestProducer?: ProducerHandle<readonly ['agent.work.requested']>
+  private workspaceService: WorkspaceService | null = null
+  private workspacesWs: AttachedWS | null = null
 
   constructor(private config: WebConfig) {}
 
@@ -121,6 +127,12 @@ export class WebPlugin implements Plugin {
     }))
     app.route('/api/version', createVersionRoutes())
 
+    // ==================== Workspaces (launcher-style PTY) ====================
+    // Self-contained subsystem ported from auto-quant-launcher. Owns its own
+    // state under ~/.openalice/workspaces/ and its own /api/workspaces/pty WS.
+    this.workspaceService = await createWorkspaceService()
+    app.route('/api/workspaces', createWorkspaceRoutes(this.workspaceService))
+
     // ==================== Mount opentypebb (market data HTTP) ====================
     // opentypebb is Alice's first-class market-data package; its router is
     // merged into this app so UI and external consumers hit a single port.
@@ -149,6 +161,11 @@ export class WebPlugin implements Plugin {
     this.server = serve({ fetch: app.fetch, port: this.config.port }, (info: { port: number }) => {
       console.log(`web plugin listening on http://localhost:${info.port}`)
     })
+
+    // Attach WS upgrade handler for /api/workspaces/pty onto the same http.Server.
+    if (this.workspaceService) {
+      this.workspacesWs = attachWorkspacesWS(this.server as HttpServer, this.workspaceService)
+    }
   }
 
   async stop() {
@@ -156,6 +173,12 @@ export class WebPlugin implements Plugin {
     this.unregisterConnector?.()
     this.ingestProducer?.dispose()
     this.ingestProducer = undefined
+    this.workspacesWs?.dispose()
+    this.workspacesWs = null
+    if (this.workspaceService) {
+      await this.workspaceService.dispose('plugin stop')
+      this.workspaceService = null
+    }
     this.server?.close()
   }
 }

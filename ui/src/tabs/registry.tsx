@@ -13,11 +13,14 @@ import { SettingsPage } from '../pages/SettingsPage'
 import { AIProviderPage } from '../pages/AIProviderPage'
 import { TradingPage } from '../pages/TradingPage'
 import { ConnectorsPage } from '../pages/ConnectorsPage'
+import { MCPPage } from '../pages/MCPPage'
 import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
 import { DevPage } from '../pages/DevPage'
 import { NotificationsInboxPage } from '../pages/NotificationsInboxPage'
+import { WorkspaceListPage } from '../pages/WorkspaceListPage'
+import { WorkspacePage } from '../pages/WorkspacePage'
 
 /**
  * Central registry mapping each ViewKind to its render component and URL
@@ -124,6 +127,7 @@ const settingsCategoryTitle: Record<
   'ai-provider': 'AI Provider',
   trading: 'Trading Accounts',
   connectors: 'Connectors',
+  mcp: 'MCP Server',
   'market-data': 'Market Data',
   'news-collector': 'News Sources',
 }
@@ -134,6 +138,7 @@ function SettingsRouter({ spec }: ViewProps<'settings'>) {
     case 'ai-provider': return <AIProviderPage />
     case 'trading': return <TradingPage />
     case 'connectors': return <ConnectorsPage />
+    case 'mcp': return <MCPPage />
     case 'market-data': return <MarketDataPage />
     case 'news-collector': return <NewsCollectorPage />
   }
@@ -179,6 +184,28 @@ const notificationsInboxModule: ViewModule<'notifications-inbox'> = {
   Component: NotificationsInboxPage,
 }
 
+const workspaceListModule: ViewModule<'workspace-list'> = {
+  kind: 'workspace-list',
+  title: () => 'Workspaces',
+  toUrl: () => '/workspaces',
+  Component: () => <WorkspaceListPage />,
+}
+
+const workspaceModule: ViewModule<'workspace'> = {
+  kind: 'workspace',
+  title: (spec) => {
+    const ws = spec.params.wsId.slice(0, 8)
+    const sid = spec.params.sessionId
+    return sid ? `${ws} · ${sid.slice(0, 6)}` : ws
+  },
+  toUrl: (spec) => {
+    const base = `/workspaces/${encodeURIComponent(spec.params.wsId)}`
+    const sid = spec.params.sessionId
+    return sid ? `${base}/s/${encodeURIComponent(sid)}` : base
+  },
+  Component: WorkspacePage,
+}
+
 // ==================== Aggregate ====================
 
 export const VIEWS = {
@@ -193,6 +220,8 @@ export const VIEWS = {
   'uta-detail': utaDetailModule,
   dev: devModule,
   'notifications-inbox': notificationsInboxModule,
+  'workspace-list': workspaceListModule,
+  workspace: workspaceModule,
 } as const satisfies { [K in ViewKind]: ViewModule<K> }
 
 /** Untyped lookup — narrow at the call site by inspecting `spec.kind`. */

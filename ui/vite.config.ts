@@ -9,7 +9,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3002',
+      '/api': {
+        target: 'http://localhost:3002',
+        // WS upgrade forwarding — required for /api/workspaces/pty.
+        ws: true,
+      },
     },
   },
   build: {

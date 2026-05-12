@@ -11,8 +11,9 @@
  * any output gate, so the default deliver-result.text behaviour wins.
  *
  * Internal jobs (heartbeat / snapshot) no longer live in the cron
- * engine — they each own their own Pump now. So there's no
- * `__*__` filter needed in this listener anymore.
+ * engine — they each own their own Pump. Migration 0004 prunes any
+ * `__*__` orphan entries from the on-disk store on upgrade; a
+ * defensive guard in handle() catches anything that slips back in.
  */
 
 import type { EventLogEntry } from '../../core/event-log.js'
@@ -74,6 +75,14 @@ export function createCronListener(opts: CronListenerOpts): CronListener {
       ctx: ListenerContext<CronEmits>,
     ): Promise<void> {
       const payload = entry.payload
+
+      if (payload.jobName.startsWith('__') && payload.jobName.endsWith('__')) {
+        // Internal namespace reserved for Pump-owned services
+        // (heartbeat / snapshot). Migration 0004 prunes these from the
+        // on-disk cron store; this guard catches the case where an
+        // orphan slips back in (downgrade, manual edit, regression).
+        return
+      }
 
       if (processing) {
         console.warn(`cron-listener: skipping job ${payload.jobId} (already processing)`)

@@ -18,6 +18,15 @@ the item when done — git log is the history.
       external callers get isolated conversation histories instead of
       sharing `task/default`.
 
+## Architecture — MCP / ToolCenter
+
+- [ ] Document the workspaces `.mcp.json` URL/transport convention in
+      the README. The codex adapter's `mcp_servers.<name>.url`
+      translation is now a permanent contract — chat template's
+      `.mcp.json` is the public surface for "an MCP-aware agent inside
+      a workspace can call OpenAlice". Future template authors need to
+      know what shape to ship.
+
 ## Security
 
 - [ ] Broader API security audit. Only `/api/events/ingest` has auth
@@ -333,5 +342,52 @@ the item when done — git log is the history.
 - [ ] LeverUp `unrealizedPnL` from positions REST is currently 0 in
       `getPositions()`. Compute from (mark - entry) * qty * direction
       once we have a stable mark-price source for non-Pyth-feed pairs.
+
+## Workspaces (launcher integration)
+
+- [ ] `AQ_*` env prefix rename to `OPENALICE_WORKSPACE_*`. Kept as `AQ_*`
+      for the initial cp from auto-quant-launcher to minimize churn; the
+      decision was to rename in a dedicated cleanup PR (plan §D8). Affects
+      `src/workspaces/config.ts` (AQ_LAUNCHER_ROOT, AQ_TEMPLATE_DIR,
+      AQ_BOOTSTRAP_SCRIPT, AQ_TEMPLATES_DIR, AQ_SHARED_DATA_DIR,
+      AQ_BOOTSTRAP_TIMEOUT_MS) plus `spawn-env.ts` extras (AQ_WS_ID,
+      AQ_LAUNCHER_REPO_ROOT) and `bootstrap.sh` env references.
+- [ ] Top-level `CLAUDE.md` is stale in two places after the workspaces
+      integration: (a) Project Structure section still references
+      `src/plugins/mcp.ts` — moved to `src/server/mcp.ts` earlier;
+      (b) Project Structure should add `src/workspaces/` (composition
+      root + adapters + templates + cp'd domain modules) and the
+      `src/webui/routes/workspaces.ts` + `src/webui/workspaces-ws.ts`
+      adapters.
+- [ ] auto-quant template end-to-end. Requires
+      `export AQ_TEMPLATE_DIR=/path/to/Auto-Quant` before creating a
+      workspace from that template. Currently only the chat template was
+      smoke-tested live; auto-quant template only verified the
+      env-empty-fails-loudly path via bootstrap.sh's `:?` check.
+- [ ] User-added template overlay at
+      `~/.openalice/workspaces/templates/`. Today templates ship from
+      `src/workspaces/templates/` only (compile-time fixed). An overlay
+      path read at runtime would let users add custom templates without
+      forking OpenAlice.
+- [ ] xterm `TypeError: Cannot read properties of undefined (reading
+      'dimensions')` fires once per fresh terminal mount (xterm's
+      `Viewport.syncScrollArea` reads `_renderService.dimensions`
+      before the renderer attaches). Non-fatal — terminal renders
+      correctly once dimensions settle — but pollutes the console.
+      Fix: gate fit on `onRender` or defer to next microtask after
+      `open()`.
+- [x] ~~Dev-mode Vite WS proxy~~ — resolved 2026-05-12 by upgrading
+      `ui/vite.config.ts`'s `/api` proxy from string-form to
+      `{ target, ws: true }`. WS upgrade now forwards in dev mode on
+      port 5173.
+- [ ] `ui/src/components/workspace/` is OpenAlice's first sub-folder
+      under `components/`. If we adopt this pattern for other complex
+      features, document the convention; otherwise reconsider whether
+      to flatten when the workspaces feature stabilizes.
+- [ ] Workspaces sidebar lacks an `Actions` header button (the
+      OpenAlice sidebar pattern, mirroring `NewChannelButton`). The
+      inline create form inside the launcher's `Sidebar.tsx` covers
+      the function, but a header `+` would visually match other
+      activities.
 
 ## (seed more areas as they come up)

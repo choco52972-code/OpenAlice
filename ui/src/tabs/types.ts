@@ -15,13 +15,15 @@
 
 export type ViewSpec =
   | { kind: 'chat';           params: { channelId: string } }
+  | { kind: 'workspace-list'; params: Record<string, never> }
+  | { kind: 'workspace';      params: { wsId: string; sessionId?: string } }
   | { kind: 'diary';          params: Record<string, never> }
   | { kind: 'portfolio';      params: Record<string, never> }
   | { kind: 'automation';     params: { section: 'flow' | 'heartbeat' | 'cron' | 'webhook' } }
   | { kind: 'news';           params: Record<string, never> }
   | { kind: 'market-list';    params: Record<string, never> }
   | { kind: 'market-detail';  params: { assetClass: 'equity' | 'crypto' | 'currency' | 'commodity'; symbol: string } }
-  | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'trading' | 'connectors' | 'market-data' | 'news-collector' } }
+  | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'trading' | 'connectors' | 'mcp' | 'market-data' | 'news-collector' } }
   | { kind: 'uta-detail';     params: { id: string } }
   | { kind: 'dev';            params: { tab: 'connectors' | 'tools' | 'sessions' | 'snapshots' | 'logs' | 'simulator' } }
   | { kind: 'notifications-inbox'; params: Record<string, never> }
@@ -45,6 +47,7 @@ export type ViewKind = ViewSpec['kind']
  */
 export type ActivitySection =
   | 'chat'
+  | 'workspaces'
   | 'trading-as-git'
   | 'settings'
   | 'dev'

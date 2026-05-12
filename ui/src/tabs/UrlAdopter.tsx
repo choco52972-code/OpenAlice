@@ -47,6 +47,7 @@ export function UrlAdopter() {
         <Route path="/settings/ai-provider" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'ai-provider' } }} />} />
         <Route path="/settings/trading" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'trading' } }} />} />
         <Route path="/settings/connectors" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'connectors' } }} />} />
+        <Route path="/settings/mcp" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'mcp' } }} />} />
         <Route path="/settings/market-data" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'market-data' } }} />} />
         <Route path="/settings/news-collector" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'news-collector' } }} />} />
         <Route path="/settings/uta/:id" element={<AdoptUtaDetail />} />
@@ -57,6 +58,11 @@ export function UrlAdopter() {
 
         {/* Notifications inbox */}
         <Route path="/notifications" element={<AdoptStatic spec={{ kind: 'notifications-inbox', params: {} }} />} />
+
+        {/* Workspaces */}
+        <Route path="/workspaces" element={<AdoptStatic spec={{ kind: 'workspace-list', params: {} }} />} />
+        <Route path="/workspaces/:wsId" element={<AdoptWorkspace />} />
+        <Route path="/workspaces/:wsId/s/:sessionId" element={<AdoptWorkspace />} />
 
         {/* Legacy redirects — preserved from sections.tsx */}
         <Route path="/logs" element={<Navigate to="/dev/logs" replace />} />
@@ -148,6 +154,14 @@ function AdoptAutomation() {
       }}
     />
   )
+}
+
+function AdoptWorkspace() {
+  const { wsId, sessionId } = useParams<{ wsId: string; sessionId?: string }>()
+  if (!wsId) return <Navigate to="/workspaces" replace />
+  const params: { wsId: string; sessionId?: string } = { wsId }
+  if (sessionId) params.sessionId = sessionId
+  return <AdoptStatic spec={{ kind: 'workspace', params }} />
 }
 
 function RedirectUtaDetail() {

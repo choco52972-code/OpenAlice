@@ -313,21 +313,6 @@ async function main() {
     buildErrorMetadata: (req) => ({ prompt: req.prompt }),
   })
 
-  // ==================== One-time migration: clean orphan internal cron jobs ====================
-  //
-  // Prior to the Pump refactor, heartbeat and snapshot registered their
-  // schedules as internal cron jobs (__heartbeat__, __snapshot__) inside
-  // the cron engine. They now own private Pumps. Any pre-existing entries
-  // in data/cron/jobs.json are orphan disk state — clean them up so
-  // they don't show in the Automation > Cron UI and don't take up
-  // memory in cron-engine.
-  for (const job of cronEngine.list()) {
-    if (job.name.startsWith('__') && job.name.endsWith('__')) {
-      console.log(`cron: removing orphan internal job ${job.name} (${job.id})`)
-      await cronEngine.remove(job.id)
-    }
-  }
-
   // ==================== Cron Listener ====================
 
   const cronSession = new SessionStore('cron/default')
@@ -386,9 +371,11 @@ async function main() {
   // Core plugins — always-on, not toggleable at runtime
   const corePlugins: Plugin[] = []
 
-  // MCP Server is always active when a port is set — Claude Code provider depends on it for tools
-  if (config.connectors.mcp.port) {
-    corePlugins.push(new McpPlugin(toolCenter, config.connectors.mcp.port))
+  // MCP Server is always active when a port is set — Claude Code provider depends on it for tools.
+  // Lives at top-level config (not under connectors:) because it exports
+  // ToolCenter outward rather than consuming chat input.
+  if (config.mcp.port) {
+    corePlugins.push(new McpPlugin(toolCenter, config.mcp.port))
   }
 
   // Web UI is always active (no enabled flag)

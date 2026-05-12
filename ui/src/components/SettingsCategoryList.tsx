@@ -20,6 +20,7 @@ const CATEGORIES: CategoryItem[] = [
   { label: 'AI Provider', category: 'ai-provider' },
   { label: 'Trading Accounts', category: 'trading', alsoActiveFor: ['uta-detail'] },
   { label: 'Connectors', category: 'connectors' },
+  { label: 'MCP Server', category: 'mcp' },
   { label: 'Market Data', category: 'market-data' },
   { label: 'News Sources', category: 'news-collector' },
 ]

@@ -36,15 +36,16 @@ export function ConnectorsPage() {
     setPendingChatId(null)
   }
 
-  // Derive selected connector IDs from enabled flags (web + mcp are always included)
+  // Derive selected connector IDs from enabled flags. Web UI is always
+  // included; MCP server lives at top-level config now (Settings → MCP Server),
+  // not under connectors.
   const selected = config
     ? [
         'web',
-        'mcp',
         ...(config.mcpAsk.enabled ? ['mcpAsk'] : []),
         ...(config.telegram.enabled ? ['telegram'] : []),
       ]
-    : ['web', 'mcp']
+    : ['web']
 
   const handleToggle = (id: string) => {
     if (!config) return
@@ -92,7 +93,7 @@ export function ConnectorsPage() {
             {/* Connector selector cards */}
             <ConfigSection
               title="Active Connectors"
-              description="Select which connectors to enable. Web UI and MCP Server are always active."
+              description="Select which chat surfaces to enable. Web UI is always active."
             >
               <SDKSelector
                 options={CONNECTOR_OPTIONS}
@@ -112,21 +113,6 @@ export function ConnectorsPage() {
                   type="number"
                   value={config.web.port}
                   onChange={(e) => updateConfig({ web: { port: Number(e.target.value) } })}
-                />
-              </Field>
-            </ConfigSection>
-
-            {/* MCP Server config — always shown */}
-            <ConfigSection
-              title="MCP Server"
-              description="Tool bridge for Claude Code provider and external AI agents."
-            >
-              <Field label="Port">
-                <input
-                  className={inputClass}
-                  type="number"
-                  value={config.mcp.port}
-                  onChange={(e) => updateConfig({ mcp: { port: Number(e.target.value) } })}
                 />
               </Field>
             </ConfigSection>

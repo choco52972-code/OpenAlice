@@ -68,6 +68,7 @@ export type {
   WalletCommitLog,
   ReconnectResult,
   ConnectorsConfig,
+  McpConfig,
   NewsCollectorConfig,
   NewsCollectorFeed,
   ToolCallRecord,
