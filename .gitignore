@@ -26,6 +26,7 @@ coverage/
 
 # Claude Code
 .claude/
+.playwright-mcp/
 packages/ibkr/ref/source/JavaClient/
 packages/ibkr/ref/source/cppclient/
 packages/ibkr/ref/samples/Java/
