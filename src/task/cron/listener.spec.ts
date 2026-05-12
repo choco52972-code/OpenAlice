@@ -119,10 +119,23 @@ describe('cron listener', () => {
       expect(typeof done.causedBy).toBe('number')
     })
 
-    // Note: pre-Pump refactor, cron-router filtered `__*__` jobs to avoid
-    // double-handling heartbeat / snapshot. After the Pump migration, these
-    // internal jobs no longer live in the cron engine at all — so the
-    // filter has been removed. Test deleted alongside the dead code.
+    it('drops internal __*__ job names without forwarding to agent-work', async () => {
+      // Pump-driven services (heartbeat / snapshot) reserve the `__*__`
+      // namespace. Migration 0004 prunes any such entries from the on-disk
+      // cron store on upgrade, but a downgrade / manual edit / future
+      // refactor could re-introduce one. The listener guard is the last
+      // line of defense — orphan exists on disk but never reaches AI.
+      await eventLog.append('cron.fire', {
+        jobId: '18128a16',
+        jobName: '__snapshot__',
+        payload: '',
+      } satisfies CronFirePayload)
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(eventLog.recent({ type: 'agent.work.requested' })).toHaveLength(0)
+      expect(mockEngine.askWithSession).not.toHaveBeenCalled()
+    })
 
     it('does not react to other event types', async () => {
       await eventLog.append('message.received' as never, { channel: 'web', to: 'x', prompt: 'p' })

@@ -52,6 +52,29 @@ Unfinished items there compound over time if they're forgotten.
   add it with enough context (symptom + suspected location) that the
   next person can start without re-derivation.
 
+## Migrations
+
+`data/config/` and other persisted user state evolve across releases.
+Any upgrade-time transformation of user data — schema changes, file
+renames, orphan cleanup, value backfills — MUST go through the
+migration framework at `src/migrations/`, not ad-hoc startup code.
+
+- New migrations live at `src/migrations/NNNN_short_name/index.ts` with
+  a sibling spec. Append to `src/migrations/registry.ts`, then
+  `pnpm build:migration-index` regenerates `src/migrations/INDEX.md`.
+- Idempotency is enforced at two layers: the journal in
+  `data/config/_meta.json` and the in-body self-check. Each migration
+  body must no-op when data is already at the target shape.
+- For files outside `data/config/` (e.g. `data/cron/jobs.json`,
+  `data/sessions/`), the migration body uses raw `fs/promises` — the
+  `ctx` helpers are config-scoped. Declare the affected paths in
+  `affects` for `INDEX.md` surfacing.
+- Past failure to avoid: inline one-time cleanup loops in `src/main.ts`
+  or subsystem bootstrap. They are easy to call against unloaded state
+  and silently no-op forever — a real incident left the cron engine
+  firing orphan `__snapshot__` / `__heartbeat__` jobs every 15 min for
+  weeks before anyone noticed.
+
 ## Project Structure
 
 ```
