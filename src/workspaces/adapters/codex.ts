@@ -104,6 +104,7 @@ interface McpServerSpec {
   readonly command?: unknown;
   readonly args?: unknown;
   readonly env?: unknown;
+  readonly url?: unknown;
 }
 
 function mcpJsonToCodexFlags(cwd: string, env: Readonly<Record<string, string>>): readonly string[] {
@@ -122,6 +123,15 @@ function mcpJsonToCodexFlags(cwd: string, env: Readonly<Record<string, string>>)
     if (typeof raw !== 'object' || raw === null) continue;
     if (!/^[A-Za-z0-9_-]+$/.test(name)) continue; // skip invalid keys to keep TOML path safe
     const spec = raw as McpServerSpec;
+
+    // Streamable-HTTP MCP server. Codex's TOML key is just `url`; the
+    // `command`/`args`/`env` branch is mutually exclusive on codex's side
+    // (per `codex mcp add` usage), so we early-continue once we've emitted
+    // a url flag for this server name.
+    if (typeof spec.url === 'string') {
+      flags.push('-c', `mcp_servers.${name}.url=${tomlString(expand(spec.url, env))}`);
+      continue;
+    }
 
     if (typeof spec.command === 'string') {
       flags.push('-c', `mcp_servers.${name}.command=${tomlString(expand(spec.command, env))}`);
