@@ -9,9 +9,7 @@
  */
 
 import { join } from 'node:path';
-import { existsSync } from 'node:fs';
 
-import { ensureSharedData } from './bootstrap-data.js';
 import { claudeAdapter } from './adapters/claude.js';
 import { codexAdapter } from './adapters/codex.js';
 import { shellAdapter } from './adapters/shell.js';
@@ -45,16 +43,6 @@ export interface WorkspaceService {
 
 export async function createWorkspaceService(): Promise<WorkspaceService> {
   const config = loadConfig();
-
-  // Auto-quant data seeding only makes sense if the user has pointed at an
-  // Auto-Quant clone. Chat template etc. work without it.
-  if (config.templateDir && existsSync(config.templateDir)) {
-    await ensureSharedData({
-      templateDir: config.templateDir,
-      sharedDataDir: config.sharedDataDir,
-      logger: launcherLogger.child({ scope: 'data-bootstrap' }),
-    });
-  }
 
   const registry = await WorkspaceRegistry.load(
     `${config.launcherRoot}/workspaces.json`,
@@ -99,7 +87,6 @@ export async function createWorkspaceService(): Promise<WorkspaceService> {
     adapterRegistry: adapters,
     bootstrapEnv: {
       templateDir: config.templateDir,
-      sharedDataDir: config.sharedDataDir,
       launcherRepoRoot: config.launcherRepoRoot,
     },
     bootstrapTimeoutMs: config.bootstrapTimeoutMs,

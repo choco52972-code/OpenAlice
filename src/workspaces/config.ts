@@ -26,10 +26,8 @@ export interface ServerConfig {
    * template named `legacy` so old configurations keep working.
    */
   readonly legacyBootstrapScript: string | null;
-  /** Path to an Auto-Quant clone the auto-quant template reads from. */
+  /** Optional Auto-Quant clone override (power-user; default is the managed mirror under launcherRoot). */
   readonly templateDir: string;
-  /** Directory holding shared *.feather files (auto-quant template symlinks into it). */
-  readonly sharedDataDir: string;
   /** Bootstrap script kill timeout. */
   readonly bootstrapTimeoutMs: number;
   /** Absolute path to the launcher repo root (used for `${AQ_LAUNCHER_REPO_ROOT}` expansion). */
@@ -82,9 +80,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ? resolve(env['AQ_BOOTSTRAP_SCRIPT'])
     : null;
   const templateDir = env['AQ_TEMPLATE_DIR'] ? resolve(env['AQ_TEMPLATE_DIR']) : '';
-  const sharedDataDir = resolve(
-    env['AQ_SHARED_DATA_DIR'] ?? join(launcherRoot, 'data'),
-  );
   const bootstrapTimeoutMs = parseIntEnv(
     env['AQ_BOOTSTRAP_TIMEOUT_MS'],
     DEFAULT_BOOTSTRAP_TIMEOUT_MS,
@@ -107,7 +102,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     templatesDir,
     legacyBootstrapScript,
     templateDir,
-    sharedDataDir,
     bootstrapTimeoutMs,
     launcherRepoRoot,
   };
