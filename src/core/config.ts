@@ -236,11 +236,20 @@ const activeHoursSchema = z.object({
 }).nullable().default(null)
 
 
+/**
+ * MCP server config — exposes OpenAlice's ToolCenter to external MCP
+ * clients (Claude Desktop, codex inside workspaces, etc.). Lives at the
+ * top level of Config rather than under `connectors:` because it's an
+ * export direction (ToolCenter → outside), not a chat-input connector.
+ * `connectors.mcpAsk` is the actual chat-shaped MCP-as-input flavour
+ * and stays in connectors.
+ */
+const mcpSchema = z.object({
+  port: z.number().int().positive().default(3001),
+}).default({ port: 3001 })
+
 const connectorsSchema = z.object({
   web: z.object({ port: z.number().int().positive().default(3002) }).default({ port: 3002 }),
-  mcp: z.object({
-    port: z.number().int().positive().default(3001),
-  }).default({ port: 3001 }),
   mcpAsk: z.object({
     enabled: z.boolean().default(false),
     port: z.number().int().positive().optional(),
@@ -356,6 +365,7 @@ export type Config = {
   aiProvider: z.infer<typeof aiProviderSchema>
   heartbeat: z.infer<typeof heartbeatSchema>
   snapshot: z.infer<typeof snapshotSchema>
+  mcp: z.infer<typeof mcpSchema>
   connectors: z.infer<typeof connectorsSchema>
   news: z.infer<typeof newsCollectorSchema>
   tools: z.infer<typeof toolsSchema>
@@ -397,7 +407,7 @@ export async function loadConfig(): Promise<Config> {
   // is pending. See src/migrations/INDEX.md for the full list.
   await runMigrations()
 
-  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'heartbeat.json', 'snapshot.json', 'connectors.json', 'news.json', 'tools.json', 'webhook.json'] as const
+  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'heartbeat.json', 'snapshot.json', 'mcp.json', 'connectors.json', 'news.json', 'tools.json', 'webhook.json'] as const
   const raws = await Promise.all(files.map((f) => loadJsonFile(f)))
 
   return {
@@ -410,10 +420,11 @@ export async function loadConfig(): Promise<Config> {
     aiProvider:    await parseAndSeed(files[6], aiProviderSchema, raws[6]),
     heartbeat:     await parseAndSeed(files[7], heartbeatSchema, raws[7]),
     snapshot:      await parseAndSeed(files[8], snapshotSchema, raws[8]),
-    connectors:    await parseAndSeed(files[9], connectorsSchema, raws[9]),
-    news:          await parseAndSeed(files[10], newsCollectorSchema, raws[10]),
-    tools:         await parseAndSeed(files[11], toolsSchema, raws[11]),
-    webhook:       await parseAndSeed(files[12], webhookSchema, raws[12]),
+    mcp:           await parseAndSeed(files[9], mcpSchema, raws[9]),
+    connectors:    await parseAndSeed(files[10], connectorsSchema, raws[10]),
+    news:          await parseAndSeed(files[11], newsCollectorSchema, raws[11]),
+    tools:         await parseAndSeed(files[12], toolsSchema, raws[12]),
+    webhook:       await parseAndSeed(files[13], webhookSchema, raws[13]),
   }
 }
 
@@ -887,6 +898,7 @@ const sectionSchemas: Record<ConfigSection, z.ZodTypeAny> = {
   aiProvider: aiProviderSchema,
   heartbeat: heartbeatSchema,
   snapshot: snapshotSchema,
+  mcp: mcpSchema,
   connectors: connectorsSchema,
   news: newsCollectorSchema,
   tools: toolsSchema,
@@ -903,6 +915,7 @@ const sectionFiles: Record<ConfigSection, string> = {
   aiProvider: 'ai-provider-manager.json',
   heartbeat: 'heartbeat.json',
   snapshot: 'snapshot.json',
+  mcp: 'mcp.json',
   connectors: 'connectors.json',
   news: 'news.json',
   tools: 'tools.json',

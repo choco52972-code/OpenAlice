@@ -47,6 +47,7 @@ export function UrlAdopter() {
         <Route path="/settings/ai-provider" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'ai-provider' } }} />} />
         <Route path="/settings/trading" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'trading' } }} />} />
         <Route path="/settings/connectors" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'connectors' } }} />} />
+        <Route path="/settings/mcp" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'mcp' } }} />} />
         <Route path="/settings/market-data" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'market-data' } }} />} />
         <Route path="/settings/news-collector" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'news-collector' } }} />} />
         <Route path="/settings/uta/:id" element={<AdoptUtaDetail />} />

@@ -13,6 +13,7 @@ import { SettingsPage } from '../pages/SettingsPage'
 import { AIProviderPage } from '../pages/AIProviderPage'
 import { TradingPage } from '../pages/TradingPage'
 import { ConnectorsPage } from '../pages/ConnectorsPage'
+import { MCPPage } from '../pages/MCPPage'
 import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
@@ -126,6 +127,7 @@ const settingsCategoryTitle: Record<
   'ai-provider': 'AI Provider',
   trading: 'Trading Accounts',
   connectors: 'Connectors',
+  mcp: 'MCP Server',
   'market-data': 'Market Data',
   'news-collector': 'News Sources',
 }
@@ -136,6 +138,7 @@ function SettingsRouter({ spec }: ViewProps<'settings'>) {
     case 'ai-provider': return <AIProviderPage />
     case 'trading': return <TradingPage />
     case 'connectors': return <ConnectorsPage />
+    case 'mcp': return <MCPPage />
     case 'market-data': return <MarketDataPage />
     case 'news-collector': return <NewsCollectorPage />
   }

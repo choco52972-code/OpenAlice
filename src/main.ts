@@ -371,9 +371,11 @@ async function main() {
   // Core plugins — always-on, not toggleable at runtime
   const corePlugins: Plugin[] = []
 
-  // MCP Server is always active when a port is set — Claude Code provider depends on it for tools
-  if (config.connectors.mcp.port) {
-    corePlugins.push(new McpPlugin(toolCenter, config.connectors.mcp.port))
+  // MCP Server is always active when a port is set — Claude Code provider depends on it for tools.
+  // Lives at top-level config (not under connectors:) because it exports
+  // ToolCenter outward rather than consuming chat input.
+  if (config.mcp.port) {
+    corePlugins.push(new McpPlugin(toolCenter, config.mcp.port))
   }
 
   // Web UI is always active (no enabled flag)
