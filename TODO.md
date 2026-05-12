@@ -18,6 +18,29 @@ the item when done — git log is the history.
       external callers get isolated conversation histories instead of
       sharing `task/default`.
 
+## Architecture — MCP / ToolCenter
+
+- [ ] Extract MCP from `connectors:` into its own settings level.
+      `connectors.mcp` and `connectors.mcpAsk` are mis-categorised:
+      Connector semantics is "talk to an IM / chat surface" (web,
+      Telegram, MCP Ask is the chat-shaped MCP-as-input flavour). The
+      MCP **server** plugin at `src/server/mcp.ts` is the opposite
+      direction — it **exports** OpenAlice's ToolCenter to external
+      MCP clients (Claude Desktop, codex CLI inside workspaces, etc.).
+      That's a ToolCenter-level concern, not a Connector concern.
+      Refactor: move `connectors.mcp` → top-level `mcp:` (or
+      `toolExport.mcp:`) config section, move the Settings UI tab out
+      of "Connectors", keep the runtime plugin where it is (path
+      already corrected to `src/server/mcp.ts`). mcpAsk has the
+      opposite direction (chat-shaped input via MCP) so it legitimately
+      belongs in connectors — leave it.
+- [ ] Once extraction lands, the codex adapter's
+      `mcp_servers.<name>.url` translation will be a permanent
+      contract — the chat template's `.mcp.json` is the public surface
+      for "an MCP-aware agent inside a workspace can call OpenAlice".
+      Document the URL/transport convention in the README so future
+      template authors know what to ship.
+
 ## Security
 
 - [ ] Broader API security audit. Only `/api/events/ingest` has auth
