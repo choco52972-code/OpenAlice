@@ -14,6 +14,7 @@
 import type { ComponentType } from 'react'
 import { ChatChannelListContainer } from './components/ChatChannelListContainer'
 import { NewChannelButton } from './components/NewChannelButton'
+import { WorkspacesSidebar } from './components/workspace/WorkspacesSidebar'
 import { PushApprovalPanel } from './components/PushApprovalPanel'
 import { SettingsCategoryList } from './components/SettingsCategoryList'
 import { DevCategoryList } from './components/DevCategoryList'
@@ -37,6 +38,10 @@ const SECTION_BY_KEY: Record<ActivitySection, SidebarSection> = {
     title: 'Chat',
     Secondary: ChatChannelListContainer,
     Actions: NewChannelButton,
+  },
+  workspaces: {
+    title: 'Workspaces',
+    Secondary: WorkspacesSidebar,
   },
   'trading-as-git': {
     title: 'Trading as Git',

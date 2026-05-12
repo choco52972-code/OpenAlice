@@ -1,0 +1,434 @@
+/**
+ * Hono routes for the Workspaces feature, mounted at /api/workspaces.
+ *
+ * Thin adapter over WorkspaceService — each handler dispatches to the same
+ * launcher domain modules (registry / pool / creator / sessionRegistry) that
+ * the original `server/src/index.ts` `handleHttp` switch did.
+ */
+
+import { Hono } from 'hono';
+import { randomUUID } from 'node:crypto';
+
+import { listDir, PathTraversal } from '../../workspaces/file-service.js';
+import { gitLog, gitStatus } from '../../workspaces/git-service.js';
+import { logger as launcherLogger } from '../../workspaces/logger.js';
+import type { SessionRecord } from '../../workspaces/session-registry.js';
+import type { SessionFactoryContext, WorkspaceService } from '../../workspaces/service.js';
+
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
+  const app = new Hono();
+
+  // ── templates / agents ───────────────────────────────────────────────────
+
+  app.get('/templates', (c) => {
+    return c.json({
+      templates: svc.templates.list().map((t) => ({
+        name: t.name,
+        ...(t.description !== undefined ? { description: t.description } : {}),
+        defaultAgents: t.defaultAgents,
+      })),
+    });
+  });
+
+  app.get('/agents', (c) => {
+    return c.json({
+      agents: svc.adapters.list().map((a) => ({
+        id: a.id,
+        displayName: a.displayName,
+        capabilities: a.capabilities,
+      })),
+    });
+  });
+
+  // ── workspaces collection ────────────────────────────────────────────────
+
+  app.get('/', async (c) => {
+    const workspaces = await Promise.all(svc.registry.list().map((w) => svc.publicMeta(w)));
+    return c.json({ workspaces });
+  });
+
+  app.post('/', async (c) => {
+    const body = await safeJson(c);
+    const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    const tag = fields['tag'];
+    if (typeof tag !== 'string') {
+      return c.json({ error: 'tag_required' }, 400);
+    }
+    const rawTemplate = fields['template'];
+    let templateName: string;
+    if (typeof rawTemplate === 'string' && rawTemplate.length > 0) {
+      templateName = rawTemplate;
+    } else {
+      const def = svc.templates.defaultName();
+      if (!def) {
+        return c.json({
+          error: 'no_templates_configured',
+          message: 'no templates discovered; set AQ_TEMPLATES_DIR or AQ_BOOTSTRAP_SCRIPT',
+        }, 500);
+      }
+      templateName = def;
+    }
+    const rawAgents = fields['agents'];
+    const agentsRequested = Array.isArray(rawAgents)
+      ? rawAgents.filter((a): a is string => typeof a === 'string' && a.length > 0)
+      : undefined;
+    const result = await svc.creator.create(
+      tag,
+      templateName,
+      agentsRequested && agentsRequested.length > 0 ? agentsRequested : undefined,
+    );
+    if (!result.ok) {
+      const status =
+        result.code === 'invalid_tag' ? 400
+        : result.code === 'unknown_template' ? 400
+        : result.code === 'unknown_agent' ? 400
+        : result.code === 'tag_in_use' ? 409
+        : 500;
+      return c.json({
+        error: result.code,
+        message: result.message,
+        stderr: 'stderr' in result && result.stderr ? result.stderr.slice(-4000) : undefined,
+      }, status);
+    }
+    return c.json({ workspace: await svc.publicMeta(result.workspace) }, 201);
+  });
+
+  // ── single workspace (DELETE + git/files sub-resources) ──────────────────
+
+  app.delete('/:id', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const purge = c.req.query('purge') === 'true';
+    svc.pool.dispose(id, 'workspace deleted');
+    const removed = await svc.registry.remove(id);
+    if (!removed) return c.json({ error: 'not_found' }, 404);
+    const droppedRecords = await svc.sessionRegistry
+      .removeAllFor(id)
+      .catch((err) => {
+        launcherLogger.warn('session_registry.remove_all_failed', { id, err });
+        return [] as readonly SessionRecord[];
+      });
+    await svc.scrollbackStore.removeAllFor(id);
+    let purged = false;
+    if (purge) {
+      try {
+        const { rm } = await import('node:fs/promises');
+        await rm(removed.dir, { recursive: true, force: true });
+        purged = true;
+      } catch (err) {
+        launcherLogger.error('workspace.purge_failed', { id, dir: removed.dir, err });
+      }
+    }
+    launcherLogger.info('workspace.removed', {
+      id,
+      dir: removed.dir,
+      purged,
+      droppedSessions: droppedRecords.length,
+    });
+    return c.json({ ok: true, purged });
+  });
+
+  app.get('/:id/git/log', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '30', 10);
+    const limit = Number.isFinite(limitRaw) ? limitRaw : 30;
+    try {
+      const entries = await gitLog(meta.dir, limit);
+      return c.json({ entries });
+    } catch (err) {
+      launcherLogger.warn('git.log_failed', { id, err });
+      return c.json({ error: 'git_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.get('/:id/git/status', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+    try {
+      const status = await gitStatus(meta.dir);
+      return c.json(status);
+    } catch (err) {
+      launcherLogger.warn('git.status_failed', { id, err });
+      return c.json({ error: 'git_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.get('/:id/files', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+    const p = c.req.query('path') ?? '';
+    try {
+      const listing = await listDir(meta.dir, p);
+      return c.json(listing);
+    } catch (err) {
+      if (err instanceof PathTraversal) {
+        return c.json({ error: 'invalid_path', message: err.message }, 400);
+      }
+      launcherLogger.warn('files.list_failed', { id, path: p, err });
+      return c.json({ error: 'list_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  // ── sessions ─────────────────────────────────────────────────────────────
+
+  app.post('/:id/sessions/spawn', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+
+    let resume: SessionFactoryContext['resume'];
+    let agentId: string | undefined;
+    try {
+      const body = await safeJson(c);
+      const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+      const raw = fields['resume'];
+      if (raw === 'last') resume = 'last';
+      else if (typeof raw === 'string' && SESSION_ID_RE.test(raw)) resume = { sessionId: raw };
+      const rawAgent = fields['agent'];
+      if (typeof rawAgent === 'string' && rawAgent.length > 0) agentId = rawAgent;
+    } catch (err) {
+      return c.json({ error: 'bad_request', message: (err as Error).message }, 400);
+    }
+    if (agentId && !svc.adapters.get(agentId)) {
+      return c.json({ error: 'unknown_agent', message: `no adapter: ${agentId}` }, 400);
+    }
+    const adapter = svc.resolveAdapter(meta, agentId);
+    try {
+      if (adapter.bootstrap) {
+        await adapter.bootstrap({
+          wsId: id,
+          cwd: meta.dir,
+          launcherRepoRoot: svc.config.launcherRepoRoot,
+        });
+      }
+    } catch (err) {
+      launcherLogger.error('adapter.bootstrap_failed', { id, agent: adapter.id, err });
+      return c.json({ error: 'bootstrap_failed', message: (err as Error).message }, 500);
+    }
+    await svc.sessionRegistry.ensureLoaded(id);
+    const prefix = adapter.namePrefix ?? adapter.id[0] ?? 's';
+    const recordId = randomUUID();
+    const recordName = svc.sessionRegistry.nextName(id, adapter.id, prefix);
+    const nowIso = new Date().toISOString();
+    const record: SessionRecord = {
+      id: recordId,
+      wsId: id,
+      agent: adapter.id,
+      name: recordName,
+      createdAt: nowIso,
+      lastActiveAt: nowIso,
+      state: 'running',
+    };
+    try {
+      await svc.sessionRegistry.create(record);
+    } catch (err) {
+      launcherLogger.error('session_registry.create_failed', { id, recordId, err });
+      return c.json({ error: 'registry_failed', message: (err as Error).message }, 500);
+    }
+    try {
+      const ctx: SessionFactoryContext = {
+        ...(resume !== undefined ? { resume } : {}),
+        ...(agentId !== undefined ? { agentId } : {}),
+        recordId,
+        recordName,
+      };
+      const session = svc.pool.spawn(id, ctx);
+      launcherLogger.info('workspace.session_spawned', {
+        id,
+        sessionId: session.recordId,
+        name: session.name,
+        pid: session.pid,
+        agent: adapter.id,
+        resume: resume === undefined ? null : resume === 'last' ? 'last' : resume.sessionId,
+      });
+      return c.json({
+        sessionId: session.recordId,
+        wsId: session.wsId,
+        name: session.name,
+        pid: session.pid,
+        agent: adapter.id,
+        agentSessionId: session.agentSessionId,
+        startedAt: session.startedAt,
+      }, 201);
+    } catch (err) {
+      await svc.sessionRegistry.remove(id, recordId).catch(() => undefined);
+      launcherLogger.error('workspace.session_spawn_failed', { id, err });
+      return c.json({ error: 'spawn_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  // pause / stop (alias)
+  for (const action of ['pause', 'stop'] as const) {
+    app.post(`/:id/sessions/:sid/${action}`, async (c) => {
+      const id = c.req.param('id');
+      const token = c.req.param('sid');
+      if (!validId(id) || !SESSION_ID_RE.test(token)) {
+        return c.json({ error: 'not_found' }, 404);
+      }
+      const record = svc.sessionRegistry.get(id, token);
+      const live = svc.pool.get(token);
+      if (!record && !live) return c.json({ error: 'not_found' }, 404);
+
+      let scrollbackRel: string | null = null;
+      if (record?.agent === 'shell' && live) {
+        try {
+          const dump = live.dumpReplayBuffer();
+          if (dump.length > 0) {
+            scrollbackRel = await svc.scrollbackStore.dump(id, token, dump);
+          }
+        } catch (err) {
+          launcherLogger.warn('scrollback.dump_failed', { id, token, err });
+        }
+      }
+      const wasRunning = svc.pool.disposeToken(token, action === 'pause' ? 'paused' : 'tab stop');
+      if (record) {
+        const patch: Partial<SessionRecord> = {
+          state: 'paused',
+          lastActiveAt: new Date().toISOString(),
+        };
+        if (scrollbackRel) patch.scrollbackFile = scrollbackRel;
+        await svc.sessionRegistry
+          .update(id, token, patch)
+          .catch((err) =>
+            launcherLogger.warn('session_registry.pause_update_failed', { id, token, err }),
+          );
+      }
+      launcherLogger.info('workspace.session_paused', {
+        id,
+        sessionId: token,
+        wasRunning,
+        via: action,
+        scrollback: scrollbackRel ?? null,
+      });
+      return c.json({ ok: true, wasRunning });
+    });
+  }
+
+  app.post('/:id/sessions/:sid/resume', async (c) => {
+    const id = c.req.param('id');
+    const token = c.req.param('sid');
+    if (!validId(id) || !SESSION_ID_RE.test(token)) {
+      return c.json({ error: 'not_found' }, 404);
+    }
+    const record = svc.sessionRegistry.get(id, token);
+    if (!record) return c.json({ error: 'not_found' }, 404);
+    if (record.state === 'running' && svc.pool.get(token)) {
+      return c.json({ ok: true, alreadyRunning: true });
+    }
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'workspace_not_found' }, 404);
+    const adapter = svc.adapters.get(record.agent);
+    if (!adapter) {
+      return c.json({
+        error: 'unknown_agent',
+        message: `record references unknown adapter: ${record.agent}`,
+      }, 500);
+    }
+    let resume: SessionFactoryContext['resume'];
+    if (record.resumeHint && adapter.capabilities.resumeById) {
+      resume = { sessionId: record.resumeHint.value };
+    } else if (adapter.capabilities.resumeLast) {
+      resume = 'last';
+    }
+    try {
+      if (adapter.bootstrap) {
+        await adapter.bootstrap({
+          wsId: id,
+          cwd: meta.dir,
+          launcherRepoRoot: svc.config.launcherRepoRoot,
+        });
+      }
+    } catch (err) {
+      launcherLogger.error('adapter.bootstrap_failed_on_resume', { id, agent: adapter.id, err });
+      return c.json({ error: 'bootstrap_failed', message: (err as Error).message }, 500);
+    }
+    let initialReplayBytes: Buffer | null = null;
+    if (record.agent === 'shell' && record.scrollbackFile) {
+      initialReplayBytes = await svc.scrollbackStore.read(record.scrollbackFile);
+    }
+    try {
+      const ctx: SessionFactoryContext = {
+        ...(resume !== undefined ? { resume } : {}),
+        agentId: record.agent,
+        recordId: record.id,
+        recordName: record.name,
+        ...(initialReplayBytes ? { initialReplayBytes } : {}),
+      };
+      const session = svc.pool.spawn(id, ctx);
+      if (record.scrollbackFile) {
+        await svc.scrollbackStore.remove(record.scrollbackFile);
+        delete (record as { scrollbackFile?: string }).scrollbackFile;
+      }
+      await svc.sessionRegistry
+        .update(id, token, { state: 'running', lastActiveAt: new Date().toISOString() })
+        .catch((err) =>
+          launcherLogger.warn('session_registry.resume_update_failed', { id, token, err }),
+        );
+      launcherLogger.info('workspace.session_resumed', {
+        id,
+        sessionId: token,
+        name: session.name,
+        pid: session.pid,
+        agent: adapter.id,
+        resume: resume === undefined ? null : resume === 'last' ? 'last' : resume.sessionId,
+        scrollbackBytes: initialReplayBytes?.length ?? 0,
+      });
+      return c.json({
+        ok: true,
+        sessionId: session.recordId,
+        wsId: session.wsId,
+        name: session.name,
+        pid: session.pid,
+        agent: adapter.id,
+        startedAt: session.startedAt,
+      });
+    } catch (err) {
+      launcherLogger.error('workspace.session_resume_failed', { id, token, err });
+      return c.json({ error: 'resume_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.delete('/:id/sessions/:sid', async (c) => {
+    const id = c.req.param('id');
+    const token = c.req.param('sid');
+    if (!validId(id) || !SESSION_ID_RE.test(token)) {
+      return c.json({ error: 'not_found' }, 404);
+    }
+    const record = svc.sessionRegistry.get(id, token);
+    if (!record) return c.json({ error: 'not_found' }, 404);
+    const wasRunning = svc.pool.disposeToken(token, 'session deleted');
+    if (record.scrollbackFile) {
+      await svc.scrollbackStore.remove(record.scrollbackFile);
+    }
+    await svc.sessionRegistry.remove(id, token).catch((err) =>
+      launcherLogger.warn('session_registry.delete_failed', { id, token, err }),
+    );
+    launcherLogger.info('workspace.session_deleted', { id, sessionId: token, wasRunning });
+    return c.json({ ok: true, wasRunning });
+  });
+
+  return app;
+}
+
+function validId(id: string | undefined): id is string {
+  return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id);
+}
+
+async function safeJson(c: import('hono').Context): Promise<unknown> {
+  try {
+    const body = await c.req.json();
+    return body;
+  } catch {
+    return null;
+  }
+}

@@ -15,6 +15,8 @@
 
 export type ViewSpec =
   | { kind: 'chat';           params: { channelId: string } }
+  | { kind: 'workspace-list'; params: Record<string, never> }
+  | { kind: 'workspace';      params: { wsId: string; sessionId?: string } }
   | { kind: 'diary';          params: Record<string, never> }
   | { kind: 'portfolio';      params: Record<string, never> }
   | { kind: 'automation';     params: { section: 'flow' | 'heartbeat' | 'cron' | 'webhook' } }
@@ -45,6 +47,7 @@ export type ViewKind = ViewSpec['kind']
  */
 export type ActivitySection =
   | 'chat'
+  | 'workspaces'
   | 'trading-as-git'
   | 'settings'
   | 'dev'

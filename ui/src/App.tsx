@@ -6,6 +6,7 @@ import { TabHost } from './components/TabHost'
 import { ChannelConfigModal } from './components/ChannelConfigModal'
 import { UpdateBanner } from './components/UpdateBanner'
 import { ChannelsProvider, useChannels } from './contexts/ChannelsContext'
+import { WorkspacesProvider } from './contexts/WorkspacesContext'
 import { findSectionForActivity } from './sections'
 import { UrlAdopter } from './tabs/UrlAdopter'
 import { useWorkspace } from './tabs/store'
@@ -18,7 +19,7 @@ import { useWorkspace } from './tabs/store'
  * peer of Notifications (both are "Alice surfaces, not user actions").
  */
 export type Page =
-  | 'chat' | 'portfolio' | 'news' | 'automation' | 'market'
+  | 'chat' | 'workspaces' | 'portfolio' | 'news' | 'automation' | 'market'
   | 'trading-as-git'
   | 'settings' | 'dev'
 
@@ -40,7 +41,9 @@ function useIsDesktop(): boolean {
 export function App() {
   return (
     <ChannelsProvider>
-      <AppShell />
+      <WorkspacesProvider>
+        <AppShell />
+      </WorkspacesProvider>
     </ChannelsProvider>
   )
 }

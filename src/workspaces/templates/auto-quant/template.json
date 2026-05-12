@@ -1,0 +1,4 @@
+{
+  "description": "Auto-Quant autoresearch workspace — git clone --local + autoresearch/<tag> branch + symlinked data.",
+  "defaultAgents": ["claude"]
+}

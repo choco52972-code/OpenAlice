@@ -58,6 +58,11 @@ export function UrlAdopter() {
         {/* Notifications inbox */}
         <Route path="/notifications" element={<AdoptStatic spec={{ kind: 'notifications-inbox', params: {} }} />} />
 
+        {/* Workspaces */}
+        <Route path="/workspaces" element={<AdoptStatic spec={{ kind: 'workspace-list', params: {} }} />} />
+        <Route path="/workspaces/:wsId" element={<AdoptWorkspace />} />
+        <Route path="/workspaces/:wsId/s/:sessionId" element={<AdoptWorkspace />} />
+
         {/* Legacy redirects — preserved from sections.tsx */}
         <Route path="/logs" element={<Navigate to="/dev/logs" replace />} />
         <Route path="/events" element={<Navigate to="/dev/logs" replace />} />
@@ -148,6 +153,14 @@ function AdoptAutomation() {
       }}
     />
   )
+}
+
+function AdoptWorkspace() {
+  const { wsId, sessionId } = useParams<{ wsId: string; sessionId?: string }>()
+  if (!wsId) return <Navigate to="/workspaces" replace />
+  const params: { wsId: string; sessionId?: string } = { wsId }
+  if (sessionId) params.sessionId = sessionId
+  return <AdoptStatic spec={{ kind: 'workspace', params }} />
 }
 
 function RedirectUtaDetail() {
