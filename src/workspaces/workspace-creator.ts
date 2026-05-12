@@ -8,10 +8,12 @@ import type { TemplateRegistry } from './template-registry.js';
 import type { WorkspaceMeta, WorkspaceRegistry } from './workspace-registry.js';
 
 export interface BootstrapEnv {
-  /** Path to the Auto-Quant clone (or whatever the bootstrap script reads). */
+  /**
+   * Optional path to an Auto-Quant clone the user wants to override the
+   * managed mirror with. Templates that don't read `AQ_TEMPLATE_DIR`
+   * ignore this. Empty string when env unset.
+   */
   readonly templateDir: string;
-  /** Path the bootstrap script should symlink user_data/data into. */
-  readonly sharedDataDir: string;
   /** Absolute path to the launcher repo root (for `${AQ_LAUNCHER_REPO_ROOT}` references). */
   readonly launcherRepoRoot: string;
 }
@@ -105,9 +107,12 @@ export class WorkspaceCreator {
       [tag, dir],
       {
         AQ_TEMPLATE_DIR: this.opts.bootstrapEnv.templateDir,
-        AQ_SHARED_DATA_DIR: this.opts.bootstrapEnv.sharedDataDir,
         AQ_TEMPLATE_FILES_DIR: template.filesDir,
         AQ_LAUNCHER_REPO_ROOT: this.opts.bootstrapEnv.launcherRepoRoot,
+        // AQ_LAUNCHER_ROOT is intentionally NOT set here. bootstrap.sh's
+        // ${AQ_LAUNCHER_ROOT:-$HOME/.openalice/workspaces} default matches
+        // config.ts's default; a user-exported value flows in via
+        // `process.env` inheritance (see `runScript()` below).
       },
       this.opts.bootstrapTimeoutMs,
     );
