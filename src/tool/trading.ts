@@ -75,11 +75,20 @@ const sourceDesc = (required: boolean, extra?: string) => {
  * when the schema demands them; permissive `union([number, string])`
  * is unnecessary and re-opens the precision-loss path that this
  * whole sweep was meant to close.
+ *
+ * Empty string `""` is normalized to `undefined` before validation.
+ * Why: when this validator is used with `.optional()`, LLMs often
+ * emit `""` for fields they don't intend to set (instead of omitting
+ * the key), and a bare `z.string().refine(...).optional()` would
+ * then reject the empty string against the positive-number rule.
+ * Treating `""` as "not provided" matches the AI-ergonomics the
+ * `.optional()` site actually wants.
  */
 const positiveNumeric = z
   .string()
   .refine(
     (v) => {
+      if (v === '') return true
       try {
         return new Decimal(v).gt(0) && new Decimal(v).isFinite()
       } catch {
@@ -88,6 +97,7 @@ const positiveNumeric = z
     },
     { message: 'must be a positive numeric string (e.g. "0.001", "150")' },
   )
+  .transform((v) => (v === '' ? undefined : v))
 
 export function createTradingTools(manager: UTAManager, fxService?: FxService): Record<string, Tool> {
   return {
