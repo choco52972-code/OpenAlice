@@ -152,12 +152,16 @@ function defaultTemplatesDir(): string {
 }
 
 /**
- * Compute the launcher repo root from this file's location.
- *   server/src/config.ts → repo root is two levels up from this file's dir
- *   (../../). Works the same whether the entry point is `tsx src/index.ts`
- *   or a compiled `dist/index.js` because both keep the same relative shape.
+ * Compute the launcher repo root.
+ *
+ * In OpenAlice, both `pnpm dev` (tsx watch src/main.ts) and `node dist/main.js`
+ * are invoked from the OpenAlice repo root, so `process.cwd()` is the
+ * authoritative answer. The original launcher used relative-to-import-url
+ * (`server/src/config.ts → ../../`) which assumed the build preserved
+ * source layout — that holds for the launcher's `tsc` output but breaks
+ * OpenAlice's tsup single-file bundle (`dist/main.js`'s relative `../../`
+ * would resolve to the parent of the repo).
  */
 function computeLauncherRepoRoot(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  return resolve(here, '..', '..');
+  return process.cwd();
 }
