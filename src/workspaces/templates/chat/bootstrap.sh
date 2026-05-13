@@ -56,7 +56,40 @@ fi
 # drift; this is a literal copy, not a separate compose pass.
 cp CLAUDE.md AGENTS.md
 
+# ── Codex workspace skeleton ────────────────────────────────────────────────
+# Each workspace is its own VS-Code-style "open folder" — claude reads
+# `.claude/settings*.json` from cwd, codex reads `$CODEX_HOME` (which the
+# codex adapter points at this `.codex/` dir at spawn). We seed:
+#   - `.codex/config.toml` with the OpenAlice MCP block so codex sees the
+#     OpenAlice tool surface from day 1. The OpenAlice UI later patches
+#     `[model_providers.*]` + `model` / `model_provider` keys when the user
+#     picks a provider; we deliberately do not write provider config at
+#     create time (workspaces inherit the user's global CLI auth until
+#     explicitly configured).
+#   - `.codex/auth.json` symlinked to the user's global codex login so a
+#     fresh-config workspace still has a valid auth. The UI replaces this
+#     symlink with a real file when the user assigns a workspace-specific
+#     key (so global rotation doesn't leak into configured workspaces).
+mkdir -p .codex
+ln -sf "$HOME/.codex/auth.json" .codex/auth.json
+cat > .codex/config.toml <<'TOML'
+[mcp_servers.openalice]
+url = "${OPENALICE_MCP_URL:-http://127.0.0.1:3001/mcp}"
+TOML
+
 git init -q
+
+# `.git/info/exclude` is per-clone, untracked. Belt-and-suspenders against
+# UI-saved secrets ever entering a push:
+#   - .claude/settings.local.json — claude itself auto-ignores this, but
+#     the entry here defends against any future tooling reading from
+#     `.gitignore` instead of trusting claude's runtime behaviour.
+#   - .codex/auth.json — codex's auth (symlink or real file). Never push.
+{
+  echo '.claude/settings.local.json'
+  echo '.codex/auth.json'
+} >> .git/info/exclude
+
 git add .
 git -c user.email=launcher@local -c user.name=launcher commit -q -m "chat: $TAG"
 

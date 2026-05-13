@@ -74,22 +74,43 @@ export function WorkspacePage({ spec, visible }: Props) {
   // xterm + WS alive, so tab switching doesn't re-mount or re-stream — the
   // launcher's old multi-slot-in-one-pane trick is moot at this layer.
   return (
-    <div className="workspaces-root flex-1 min-h-0 flex flex-col p-3">
-      <WorkspaceView
-        wsId={wsId}
-        sessionId={sessionId}
-        activeRecord={activeRecord}
-        sessions={activeRecord ? [activeRecord] : []}
-        label={workspace.tag}
-        keyMap={APP_KEY_MAP}
-        onSpawnFresh={() => void ctx.spawn(wsId, {})}
-        onResume={(id) => void ctx.resumeSession(wsId, id)}
-        onSessionLost={() => {
-          // 4404 from the WS upgrade — the session is gone server-side.
-          // Refresh the list; the reconcile effect will close this tab.
-          void ctx.refresh()
-        }}
-      />
+    <div className="workspaces-root flex-1 min-h-0 flex flex-col">
+      {/* OpenAlice-side header bar above the launcher's WorkspaceView. The
+       *  launcher component itself is byte-faithful; we add the AI-provider
+       *  affordance here. */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-bg-secondary/30 shrink-0">
+        <span className="text-[12px] text-text-muted font-medium">{workspace.tag}</span>
+        <button
+          type="button"
+          onClick={() => ctx.openAgentConfig(wsId)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors"
+          title="Configure this workspace's AI provider (claude / codex)"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          AI Provider
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col p-3">
+        <WorkspaceView
+          wsId={wsId}
+          sessionId={sessionId}
+          activeRecord={activeRecord}
+          sessions={activeRecord ? [activeRecord] : []}
+          label={workspace.tag}
+          keyMap={APP_KEY_MAP}
+          onSpawnFresh={() => void ctx.spawn(wsId, {})}
+          onResume={(id) => void ctx.resumeSession(wsId, id)}
+          onSessionLost={() => {
+            // 4404 from the WS upgrade — the session is gone server-side.
+            // Refresh the list; the reconcile effect will close this tab.
+            void ctx.refresh()
+          }}
+        />
+      </div>
     </div>
   )
 }

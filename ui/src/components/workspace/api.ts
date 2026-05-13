@@ -265,3 +265,59 @@ export async function listFiles(id: string, relPath: string): Promise<DirListing
   if (!res.ok) throw new Error(`list files failed: ${res.status}`);
   return (await res.json()) as DirListing;
 }
+
+// ── Agent provider config ───────────────────────────────────────────────────
+
+export interface AgentProfile {
+  readonly name: string;
+  readonly baseUrl: string | null;
+  readonly apiKey: string | null;
+  readonly model: string | null;
+}
+
+export interface AgentConfig {
+  readonly baseUrl: string | null;
+  readonly apiKey: string | null;
+  readonly model: string | null;
+  /** Codex only — wire format for the upstream API. */
+  readonly wireApi?: 'chat' | 'responses' | null;
+}
+
+export interface AgentConfigBundle {
+  readonly claude: AgentConfig | null;
+  readonly codex: AgentConfig | null;
+}
+
+export type AgentId = 'claude' | 'codex';
+
+export async function listAgentProfiles(): Promise<AgentProfile[]> {
+  const res = await fetch('/api/workspaces/agent-profiles');
+  if (!res.ok) throw new Error(`list agent profiles failed: ${res.status}`);
+  const body = (await res.json()) as { profiles: AgentProfile[] };
+  return body.profiles;
+}
+
+export async function getAgentConfig(wsId: string): Promise<AgentConfigBundle> {
+  const res = await fetch(`/api/workspaces/${encodeURIComponent(wsId)}/agent-config`);
+  if (!res.ok) throw new Error(`get agent config failed: ${res.status}`);
+  return (await res.json()) as AgentConfigBundle;
+}
+
+export async function saveAgentConfig(
+  wsId: string,
+  agent: AgentId,
+  cfg: AgentConfig,
+): Promise<void> {
+  const res = await fetch(
+    `/api/workspaces/${encodeURIComponent(wsId)}/agent-config/${agent}`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(cfg),
+    },
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`save agent config failed: ${res.status} ${msg}`);
+  }
+}
