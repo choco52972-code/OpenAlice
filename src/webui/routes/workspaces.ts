@@ -8,8 +8,10 @@
 
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
 
-import { listDir, PathTraversal } from '../../workspaces/file-service.js';
+import { listDir, PathTraversal, readWorkspaceFile, writeWorkspaceFile } from '../../workspaces/file-service.js';
 import { gitLog, gitStatus } from '../../workspaces/git-service.js';
 import { logger as launcherLogger } from '../../workspaces/logger.js';
 import type { SessionRecord } from '../../workspaces/session-registry.js';
@@ -417,7 +419,222 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     return c.json({ ok: true, wasRunning });
   });
 
+  // ── agent provider config ────────────────────────────────────────────────
+  // Per-workspace AI provider config lives in CLI-native files inside the
+  // workspace (`.claude/settings.local.json`, `.codex/config.toml`,
+  // `.codex/env.json`). The CLIs read them directly via cwd-discovery /
+  // CODEX_HOME. These routes are pure file IO over the launcher's
+  // path-traversal guard.
+
+  app.get('/agent-profiles', async (c) => {
+    try {
+      const raw = await readFile(resolvePath('data/config/ai-provider-manager.json'), 'utf8');
+      const parsed = JSON.parse(raw) as { profiles?: Record<string, ProfileShape> };
+      const profiles = parsed.profiles ?? {};
+      const list = Object.entries(profiles).map(([name, p]) => ({
+        name,
+        baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : null,
+        apiKey: typeof p.apiKey === 'string' ? p.apiKey : null,
+        model: typeof p.model === 'string' ? p.model : null,
+      }));
+      return c.json({ profiles: list });
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return c.json({ profiles: [] });
+      launcherLogger.warn('agent_profiles.read_failed', { err });
+      return c.json({ error: 'profiles_read_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.get('/:id/agent-config', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+    try {
+      const [claude, codex] = await Promise.all([
+        readClaudeConfig(meta.dir),
+        readCodexConfig(meta.dir),
+      ]);
+      return c.json({ claude, codex });
+    } catch (err) {
+      if (err instanceof PathTraversal) return c.json({ error: 'invalid_path' }, 400);
+      launcherLogger.warn('agent_config.read_failed', { id, err });
+      return c.json({ error: 'read_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  app.put('/:id/agent-config/:agent', async (c) => {
+    const id = c.req.param('id');
+    const agent = c.req.param('agent');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    if (agent !== 'claude' && agent !== 'codex') return c.json({ error: 'unknown_agent' }, 400);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+
+    const body = (await safeJson(c)) as AgentConfigInput | null;
+    const cfg = body && typeof body === 'object' ? body : {};
+    try {
+      if (agent === 'claude') {
+        await writeClaudeConfig(meta.dir, cfg);
+      } else {
+        await writeCodexConfig(meta.dir, cfg);
+      }
+      launcherLogger.info('agent_config.saved', { id, agent });
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof PathTraversal) return c.json({ error: 'invalid_path' }, 400);
+      launcherLogger.warn('agent_config.write_failed', { id, agent, err });
+      return c.json({ error: 'write_failed', message: (err as Error).message }, 500);
+    }
+  });
+
   return app;
+}
+
+// ── Agent config helpers ────────────────────────────────────────────────────
+
+interface ProfileShape {
+  baseUrl?: unknown;
+  apiKey?: unknown;
+  model?: unknown;
+}
+
+interface AgentConfigInput {
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  wireApi?: 'chat' | 'responses';
+}
+
+interface ClaudeConfigShape {
+  baseUrl: string | null;
+  apiKey: string | null;
+  model: string | null;
+}
+
+interface CodexConfigShape {
+  baseUrl: string | null;
+  apiKey: string | null;
+  model: string | null;
+  wireApi: 'chat' | 'responses' | null;
+}
+
+const CLAUDE_SETTINGS_PATH = '.claude/settings.local.json';
+const CODEX_CONFIG_PATH = '.codex/config.toml';
+const CODEX_ENV_PATH = '.codex/env.json';
+const CODEX_KEY_ENV_NAME = 'OPENALICE_WORKSPACE_KEY';
+const CODEX_PROVIDER_NAME = 'workspace';
+
+async function readClaudeConfig(workspaceDir: string): Promise<ClaudeConfigShape | null> {
+  const raw = await readWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH);
+  if (raw === null) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const env = (parsed['env'] ?? {}) as Record<string, unknown>;
+  const baseUrl = typeof env['ANTHROPIC_BASE_URL'] === 'string' ? (env['ANTHROPIC_BASE_URL'] as string) : null;
+  const apiKey = typeof env['ANTHROPIC_API_KEY'] === 'string' ? (env['ANTHROPIC_API_KEY'] as string) : null;
+  const model = typeof parsed['model'] === 'string' ? (parsed['model'] as string) : null;
+  if (baseUrl === null && apiKey === null && model === null) return null;
+  return { baseUrl, apiKey, model };
+}
+
+async function writeClaudeConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
+  const hasAny = cfg.baseUrl || cfg.apiKey || cfg.model;
+  if (!hasAny) {
+    // Reset: empty settings.local.json so claude falls back to global.
+    await writeWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH, '{}\n');
+    return;
+  }
+  const out: Record<string, unknown> = {};
+  const env: Record<string, string> = {};
+  if (cfg.baseUrl) env['ANTHROPIC_BASE_URL'] = cfg.baseUrl;
+  if (cfg.apiKey) env['ANTHROPIC_API_KEY'] = cfg.apiKey;
+  if (Object.keys(env).length > 0) out['env'] = env;
+  if (cfg.model) out['model'] = cfg.model;
+  await writeWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH, JSON.stringify(out, null, 2) + '\n');
+}
+
+async function readCodexConfig(workspaceDir: string): Promise<CodexConfigShape | null> {
+  const tomlRaw = await readWorkspaceFile(workspaceDir, CODEX_CONFIG_PATH);
+  const envRaw = await readWorkspaceFile(workspaceDir, CODEX_ENV_PATH);
+  if (tomlRaw === null && envRaw === null) return null;
+
+  let baseUrl: string | null = null;
+  let wireApi: 'chat' | 'responses' | null = null;
+  let model: string | null = null;
+  if (tomlRaw) {
+    // Shape-specific extraction: we always write the provider section as
+    // `[model_providers.workspace]` with `base_url`, `wire_api`, plus
+    // top-level `model`. Regex is brittle in general but our shape is
+    // controlled (writer below produces deterministic output).
+    const providerBlock = tomlRaw.match(/\[model_providers\.workspace\][^\[]*/);
+    if (providerBlock) {
+      const block = providerBlock[0];
+      const base = block.match(/base_url\s*=\s*"([^"]*)"/);
+      if (base) baseUrl = base[1] ?? null;
+      const wire = block.match(/wire_api\s*=\s*"(chat|responses)"/);
+      if (wire) wireApi = wire[1] as 'chat' | 'responses';
+    }
+    const modelMatch = tomlRaw.match(/^model\s*=\s*"([^"]*)"\s*$/m);
+    if (modelMatch) model = modelMatch[1] ?? null;
+  }
+
+  let apiKey: string | null = null;
+  if (envRaw) {
+    try {
+      const env = JSON.parse(envRaw) as Record<string, unknown>;
+      const k = env[CODEX_KEY_ENV_NAME];
+      if (typeof k === 'string') apiKey = k;
+    } catch { /* ignore parse error, leave apiKey null */ }
+  }
+
+  if (baseUrl === null && apiKey === null && model === null && wireApi === null) return null;
+  return { baseUrl, apiKey, model, wireApi };
+}
+
+async function writeCodexConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
+  // Always preserve the MCP block (constant content, OpenAlice infrastructure).
+  // Provider block + top-level `model` / `model_provider` only when configured.
+  const mcpBlock =
+    '[mcp_servers.openalice]\n' +
+    'url = "${OPENALICE_MCP_URL:-http://127.0.0.1:3001/mcp}"\n';
+
+  const hasProvider = !!(cfg.baseUrl || cfg.model);
+  let toml = mcpBlock;
+  if (hasProvider) {
+    toml += '\n';
+    if (cfg.model) toml += `model = ${tomlString(cfg.model)}\n`;
+    if (cfg.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
+    if (cfg.baseUrl) {
+      toml += '\n';
+      toml += `[model_providers.${CODEX_PROVIDER_NAME}]\n`;
+      toml += `name = "OpenAlice workspace provider"\n`;
+      toml += `base_url = ${tomlString(cfg.baseUrl)}\n`;
+      toml += `env_key = "${CODEX_KEY_ENV_NAME}"\n`;
+      toml += `wire_api = "${cfg.wireApi ?? 'chat'}"\n`;
+    }
+  }
+  await writeWorkspaceFile(workspaceDir, CODEX_CONFIG_PATH, toml);
+
+  // env.json: holds the per-workspace API key codex picks up via env_key.
+  // Adapter's composeEnv reads this and exports at spawn. Empty / missing
+  // file = no workspace key (codex falls back to ~/.codex/auth.json OAuth).
+  if (cfg.apiKey) {
+    const envObj: Record<string, string> = { [CODEX_KEY_ENV_NAME]: cfg.apiKey };
+    await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, JSON.stringify(envObj, null, 2) + '\n');
+  } else {
+    // Reset key: write empty object so the adapter sees nothing to inject.
+    await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, '{}\n');
+  }
+}
+
+function tomlString(s: string): string {
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function validId(id: string | undefined): id is string {

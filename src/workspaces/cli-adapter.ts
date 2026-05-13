@@ -80,6 +80,20 @@ export interface CliAdapter {
   envOverrides?(parent: NodeJS.ProcessEnv): EnvOverrides;
 
   /**
+   * Optional per-spawn env contribution. Unlike `envOverrides` (static, no
+   * spawn context), this receives the full `SpawnContext` so adapters can
+   * compute env values that depend on the workspace cwd — e.g. `CODEX_HOME`
+   * pointing at `<cwd>/.codex`. Merged into the spawn env AFTER
+   * `envOverrides` so this takes precedence for overlapping keys.
+   *
+   * Intentionally narrow: this is *launcher plumbing* (where to find files),
+   * NOT a back-door for injecting provider config (keys/URLs) — those live
+   * in the workspace's own files (`.claude/settings*.json`,
+   * `.codex/config.toml`) and are read by the CLI directly.
+   */
+  composeEnv?(ctx: SpawnContext): Record<string, string>;
+
+  /**
    * Workspace-creation hook. The launcher calls this once for every adapter
    * enabled on a workspace. Responsible for technical wiring (writing
    * `.mcp.json`, adding trust entries to global config, etc.) — NOT for

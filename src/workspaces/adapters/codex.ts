@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -23,6 +23,16 @@ import type { BootstrapContext, CliAdapter, SpawnContext } from '../cli-adapter.
  *   `~/.codex/config.toml` `[projects."<abs>"] trust_level`. `bootstrap()`
  *   pre-writes that entry so the launcher's spawn doesn't stall on the
  *   prompt.
+ *
+ * AI provider config: each workspace owns its own `.codex/` (we set
+ * `CODEX_HOME=<cwd>/.codex` via `composeEnv` below). The workspace's
+ * `config.toml` carries the OpenAlice MCP server entry + any
+ * UI-configured `[model_providers.*]` blocks; `auth.json` starts as a
+ * symlink to `~/.codex/auth.json` (graceful fallback to global login)
+ * and gets replaced by the UI with a real file when the user picks a
+ * workspace-specific provider. The MCP-flag translation that the
+ * launcher originally did via `mcpJsonToCodexFlags` is gone — codex
+ * reads MCP entries directly from the workspace's `config.toml` now.
  */
 export const codexAdapter: CliAdapter = {
   id: 'codex',
@@ -35,24 +45,57 @@ export const codexAdapter: CliAdapter = {
     transcriptDiscovery: 'none',
   },
 
-  /**
-   * Note we ignore the `base` arg (which carries the env override
-   * `WEB_TERMINAL_COMMAND`, claude-shaped). Codex has a distinct binary; if a
-   * user wants to override the path, they can wrap `codex` on $PATH.
-   *
-   * We translate the workspace's agent-agnostic `<cwd>/.mcp.json` (the same
-   * file claude reads) into codex `-c mcp_servers.*` flags so the launcher's
-   * MCP servers are visible to codex out-of-the-box, without polluting the
-   * user's global `~/.codex/config.toml`. `${VAR}` placeholders in .mcp.json
-   * are expanded against the spawn env right here (codex itself doesn't
-   * substitute env vars in `-c` values).
-   */
   composeCommand(_base: readonly string[], ctx: SpawnContext): readonly string[] {
-    const mcpFlags = mcpJsonToCodexFlags(ctx.cwd, ctx.env);
-    const head = ['codex', ...mcpFlags];
+    const head = ['codex'];
     if (ctx.resume === undefined) return head;
     if (ctx.resume === 'last') return [...head, 'resume', '--last'];
     return [...head, 'resume', ctx.resume.sessionId];
+  },
+
+  /**
+   * Point codex at the workspace's own `.codex/` and inject any
+   * UI-configured env vars (api keys named by `[model_providers.X].env_key`
+   * in the workspace's `config.toml`).
+   *
+   * Defensive: only set `CODEX_HOME` when `<cwd>/.codex/auth.json` exists.
+   * Codex *crashes* ("Codex requires a login") if `CODEX_HOME` points at a
+   * dir without `auth.json`. Workspaces created by the current bootstrap
+   * always have it (real file or symlink to `~/.codex/auth.json`); legacy
+   * workspaces from before this change don't — those silently fall back
+   * to the global `~/.codex/` and lose workspace-MCP wiring until
+   * recreated. That's the migration story.
+   *
+   * `.codex/env.json` is the workspace's per-CLI env contribution. Codex
+   * has no notion of "literal api key in config" — its `env_key` field
+   * indirects through an env var. The OpenAlice UI writes the user's
+   * chosen key into `env.json` (e.g. `{"OPENALICE_WORKSPACE_KEY":"sk-..."}`)
+   * and the adapter exports those at spawn so codex's `env_key` lookup
+   * resolves. This is the one place we DO bridge a file → env (because
+   * codex requires env), but the source of truth is still the workspace
+   * file, not OpenAlice's internal state.
+   */
+  composeEnv(ctx: SpawnContext): Record<string, string> {
+    const result: Record<string, string> = {};
+    const workspaceCodex = join(ctx.cwd, '.codex');
+    if (existsSync(join(workspaceCodex, 'auth.json'))) {
+      result['CODEX_HOME'] = workspaceCodex;
+    }
+    const envFile = join(workspaceCodex, 'env.json');
+    if (existsSync(envFile)) {
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(envFile, 'utf8'));
+        if (parsed && typeof parsed === 'object') {
+          for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+              result[k] = v;
+            }
+          }
+        }
+      } catch {
+        // ignore parse errors; file is user-editable and v1 doesn't surface
+      }
+    }
+    return result;
   },
 
   async bootstrap(ctx: BootstrapContext): Promise<void> {
@@ -96,77 +139,4 @@ async function ensureTrustedProject(cwd: string): Promise<void> {
 
 function isENOENT(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'ENOENT';
-}
-
-// ── .mcp.json → codex `-c` flags ────────────────────────────────────────────
-
-interface McpServerSpec {
-  readonly command?: unknown;
-  readonly args?: unknown;
-  readonly env?: unknown;
-  readonly url?: unknown;
-}
-
-function mcpJsonToCodexFlags(cwd: string, env: Readonly<Record<string, string>>): readonly string[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(join(cwd, '.mcp.json'), 'utf8'));
-  } catch {
-    return [];
-  }
-  if (typeof parsed !== 'object' || parsed === null) return [];
-  const servers = (parsed as { mcpServers?: unknown }).mcpServers;
-  if (typeof servers !== 'object' || servers === null) return [];
-
-  const flags: string[] = [];
-  for (const [name, raw] of Object.entries(servers as Record<string, unknown>)) {
-    if (typeof raw !== 'object' || raw === null) continue;
-    if (!/^[A-Za-z0-9_-]+$/.test(name)) continue; // skip invalid keys to keep TOML path safe
-    const spec = raw as McpServerSpec;
-
-    // Streamable-HTTP MCP server. Codex's TOML key is just `url`; the
-    // `command`/`args`/`env` branch is mutually exclusive on codex's side
-    // (per `codex mcp add` usage), so we early-continue once we've emitted
-    // a url flag for this server name.
-    if (typeof spec.url === 'string') {
-      flags.push('-c', `mcp_servers.${name}.url=${tomlString(expand(spec.url, env))}`);
-      continue;
-    }
-
-    if (typeof spec.command === 'string') {
-      flags.push('-c', `mcp_servers.${name}.command=${tomlString(expand(spec.command, env))}`);
-    }
-    if (Array.isArray(spec.args)) {
-      const items = spec.args
-        .filter((a): a is string => typeof a === 'string')
-        .map((a) => tomlString(expand(a, env)))
-        .join(', ');
-      flags.push('-c', `mcp_servers.${name}.args=[${items}]`);
-    }
-    if (spec.env && typeof spec.env === 'object') {
-      for (const [k, v] of Object.entries(spec.env as Record<string, unknown>)) {
-        if (typeof v !== 'string') continue;
-        if (!/^[A-Za-z0-9_]+$/.test(k)) continue;
-        flags.push('-c', `mcp_servers.${name}.env.${k}=${tomlString(expand(v, env))}`);
-      }
-    }
-  }
-  return flags;
-}
-
-/** Expand `${VAR}` and `${VAR:-default}` against the spawn env. Missing vars become ''. */
-function expand(s: string, env: Readonly<Record<string, string>>): string {
-  return s.replace(/\$\{([^}]+)\}/g, (_match, expr: string) => {
-    const sep = expr.indexOf(':-');
-    if (sep >= 0) {
-      const name = expr.slice(0, sep);
-      const fallback = expr.slice(sep + 2);
-      return env[name] ?? fallback;
-    }
-    return env[expr] ?? '';
-  });
-}
-
-function tomlString(s: string): string {
-  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }

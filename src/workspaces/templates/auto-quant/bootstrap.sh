@@ -73,6 +73,21 @@ cd "$OUT_DIR"
 # 2. autoresearch branch from whatever master/main the source points at.
 git checkout -b "autoresearch/$TAG" >/dev/null
 
+# ── Codex workspace skeleton + agent-config excludes ─────────────────────
+# Mirror the chat template's setup so codex's CODEX_HOME=$cwd/.codex works
+# and the UI-saved secrets never leak to upstream Auto-Quant pushes. See
+# chat/bootstrap.sh for the full rationale.
+mkdir -p .codex
+ln -sf "$HOME/.codex/auth.json" .codex/auth.json
+cat > .codex/config.toml <<'TOML'
+[mcp_servers.openalice]
+url = "${OPENALICE_MCP_URL:-http://127.0.0.1:3001/mcp}"
+TOML
+{
+  echo '.claude/settings.local.json'
+  echo '.codex/auth.json'
+} >> .git/info/exclude
+
 # 3. user_data/data is a real per-workspace directory. Auto-Quant's
 #    `.gitignore` already excludes `user_data/data/`, so prepare.py's output
 #    is untracked. If the SOURCE happens to ship pre-fetched data

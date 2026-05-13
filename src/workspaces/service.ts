@@ -117,15 +117,20 @@ export async function createWorkspaceService(): Promise<WorkspaceService> {
       const ws = registry.get(wsId);
       if (!ws) throw new Error(`workspace not found: ${wsId}`);
       const adapter = resolveAdapter(ws, ctx.agentId);
-      const env = buildSpawnEnv(process.env, {
+      const baseEnv = buildSpawnEnv(process.env, {
         AQ_WS_ID: wsId,
         AQ_LAUNCHER_REPO_ROOT: config.launcherRepoRoot,
       });
       const spawnCtx = {
         ...(ctx.resume !== undefined ? { resume: ctx.resume } : {}),
         cwd: ws.dir,
-        env,
+        env: baseEnv,
       };
+      // Adapter-contributed env (e.g. codex sets CODEX_HOME=<cwd>/.codex so
+      // the CLI reads workspace-local config). Merged AFTER baseEnv so the
+      // adapter wins on key collisions.
+      const adapterEnv = adapter.composeEnv?.(spawnCtx) ?? {};
+      const env = { ...baseEnv, ...adapterEnv };
       return {
         opts: {
           command: adapter.composeCommand(config.command, spawnCtx),
