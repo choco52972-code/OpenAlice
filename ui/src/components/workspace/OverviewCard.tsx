@@ -37,11 +37,6 @@ function relativeTime(ms: number): string {
   return `${d}d ago`
 }
 
-const TEMPLATE_LABEL: Record<string, string> = {
-  chat: 'Chat workspace',
-  'auto-quant': 'Auto-Quant workspace',
-}
-
 interface Props {
   workspace: Workspace
   lastCommit: GitLogEntry | null
@@ -67,10 +62,6 @@ export function OverviewCard({
     if (sessionTs.length === 0) return new Date(w.createdAt).getTime()
     return Math.max(...sessionTs)
   }, [w.sessions, w.createdAt])
-
-  const templateLabel = w.template
-    ? (TEMPLATE_LABEL[w.template] ?? `${w.template} workspace`)
-    : 'Workspace'
 
   const dotClass = hasRunning
     ? 'bg-green'
@@ -98,7 +89,7 @@ export function OverviewCard({
             {w.tag}
           </h3>
           <p className="text-[11px] text-text-muted">
-            {templateLabel} · {relativeTime(lastActivityMs)}
+            Active {relativeTime(lastActivityMs)}
           </p>
         </div>
       </div>

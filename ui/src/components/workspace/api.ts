@@ -79,6 +79,11 @@ export async function createWorkspace(
 export interface TemplateInfo {
   readonly name: string;
   readonly description?: string;
+  /** Human-readable name for UI surfaces (dashboard section headers, etc.). */
+  readonly displayName?: string;
+  /** Sort key for dashboard grouping. Lower = earlier. Templates without
+   *  a declared `groupOrder` sort after declared ones, by name. */
+  readonly groupOrder?: number;
   readonly defaultAgents: readonly string[];
 }
 

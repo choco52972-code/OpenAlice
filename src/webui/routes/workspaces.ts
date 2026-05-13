@@ -29,6 +29,8 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
       templates: svc.templates.list().map((t) => ({
         name: t.name,
         ...(t.description !== undefined ? { description: t.description } : {}),
+        ...(t.displayName !== undefined ? { displayName: t.displayName } : {}),
+        ...(t.groupOrder !== undefined ? { groupOrder: t.groupOrder } : {}),
         defaultAgents: t.defaultAgents,
       })),
     });

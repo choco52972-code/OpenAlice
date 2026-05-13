@@ -1,14 +1,15 @@
 /**
  * Workspaces Overview dashboard.
  *
- * Card-based at-a-glance view of every workspace. Each card shows the
- * workspace's running/paused sessions, its AI-provider override status,
- * and its latest commit. Card body opens the workspace's main tab;
- * session rows drill straight into that session; the override row opens
- * the AI-provider modal.
+ * Card-based at-a-glance view of every workspace, grouped by template
+ * type into sections. Section order is driven by each template's
+ * `groupOrder` declared in its `template.json` — adding a new template
+ * type just needs the JSON entry, no frontend code change. Workspaces
+ * with an unknown / missing template land in a trailing "Other" bucket.
  *
- * Future-friendly for "publish workspace state externally" (status-page
- * feel) — no secrets surface, no internal paths.
+ * Within each section, cards sort by most-recent-activity. Card body
+ * opens the workspace tab; session rows drill into that session; the
+ * ⚙ override row opens the AI-provider modal.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -16,7 +17,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { useWorkspace } from '../tabs/store'
 import { OverviewCard } from '../components/workspace/OverviewCard'
-import { getGitLog, type GitLogEntry, type Workspace } from '../components/workspace/api'
+import {
+  getGitLog,
+  type GitLogEntry,
+  type TemplateInfo,
+  type Workspace,
+} from '../components/workspace/api'
 
 function lastActivityMs(w: Workspace): number {
   const sessionTs = w.sessions
@@ -26,8 +32,70 @@ function lastActivityMs(w: Workspace): number {
   return Math.max(...sessionTs)
 }
 
+/** Best-effort humanization for templates that don't declare a `displayName`. */
+function humanize(name: string): string {
+  return (
+    name
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join(' ') || name
+  )
+}
+
+interface Section {
+  readonly key: string
+  readonly title: string
+  readonly workspaces: readonly Workspace[]
+}
+
+const UNKNOWN_KEY = '__unknown__'
+
+function buildSections(
+  workspaces: readonly Workspace[],
+  templates: readonly TemplateInfo[],
+): Section[] {
+  // Bucket workspaces by template name; unknown / missing → "Other".
+  const knownTemplateNames = new Set(templates.map((t) => t.name))
+  const buckets = new Map<string, Workspace[]>()
+  for (const w of workspaces) {
+    const key = w.template && knownTemplateNames.has(w.template) ? w.template : UNKNOWN_KEY
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(w)
+    else buckets.set(key, [w])
+  }
+
+  // Section order = templates sorted by groupOrder (declared in each
+  // template.json), then alphabetical for ties / undeclared. Templates
+  // without a workspace in them are skipped.
+  const orderedTemplates = [...templates].sort((a, b) => {
+    const ao = a.groupOrder ?? Number.POSITIVE_INFINITY
+    const bo = b.groupOrder ?? Number.POSITIVE_INFINITY
+    if (ao !== bo) return ao - bo
+    return a.name.localeCompare(b.name)
+  })
+
+  const sections: Section[] = []
+  for (const t of orderedTemplates) {
+    const ws = buckets.get(t.name)
+    if (!ws || ws.length === 0) continue
+    const sorted = [...ws].sort((a, b) => lastActivityMs(b) - lastActivityMs(a))
+    sections.push({
+      key: t.name,
+      title: t.displayName ?? humanize(t.name),
+      workspaces: sorted,
+    })
+  }
+  const others = buckets.get(UNKNOWN_KEY)
+  if (others && others.length > 0) {
+    const sorted = [...others].sort((a, b) => lastActivityMs(b) - lastActivityMs(a))
+    sections.push({ key: UNKNOWN_KEY, title: 'Other', workspaces: sorted })
+  }
+  return sections
+}
+
 export function WorkspaceListPage() {
-  const { workspaces, openAgentConfig } = useWorkspaces()
+  const { workspaces, templates, openAgentConfig } = useWorkspaces()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
 
   // Latest commit per workspace. Fetched in parallel on mount + whenever
@@ -57,9 +125,10 @@ export function WorkspaceListPage() {
     }
   }, [idsKey, workspaces])
 
-  const sorted = useMemo(() => {
-    return [...workspaces].sort((a, b) => lastActivityMs(b) - lastActivityMs(a))
-  }, [workspaces])
+  const sections = useMemo(
+    () => buildSections(workspaces, templates),
+    [workspaces, templates],
+  )
 
   if (workspaces.length === 0) {
     return (
@@ -77,30 +146,42 @@ export function WorkspaceListPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto px-6 py-6">
-        <div className="mb-5 flex items-baseline justify-between gap-4">
+        <div className="mb-6 flex items-baseline justify-between gap-4">
           <h2 className="text-[18px] font-semibold text-text">Workspaces Overview</h2>
           <span className="text-[12px] text-text-muted">
             {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {sorted.map((w) => (
-            <OverviewCard
-              key={w.id}
-              workspace={w}
-              lastCommit={commits[w.id] ?? null}
-              onOpen={() =>
-                openOrFocus({ kind: 'workspace', params: { wsId: w.id } })
-              }
-              onOpenSession={(sid) =>
-                openOrFocus({
-                  kind: 'workspace',
-                  params: { wsId: w.id, sessionId: sid },
-                })
-              }
-              onConfigure={() => openAgentConfig(w.id)}
-            />
+        <div className="space-y-7">
+          {sections.map((sec) => (
+            <section key={sec.key}>
+              <div className="mb-3 flex items-baseline gap-2">
+                <h3 className="text-[12px] font-semibold text-text/85 uppercase tracking-wider">
+                  {sec.title}
+                </h3>
+                <span className="text-[11px] text-text-muted">· {sec.workspaces.length}</span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {sec.workspaces.map((w) => (
+                  <OverviewCard
+                    key={w.id}
+                    workspace={w}
+                    lastCommit={commits[w.id] ?? null}
+                    onOpen={() =>
+                      openOrFocus({ kind: 'workspace', params: { wsId: w.id } })
+                    }
+                    onOpenSession={(sid) =>
+                      openOrFocus({
+                        kind: 'workspace',
+                        params: { wsId: w.id, sessionId: sid },
+                      })
+                    }
+                    onConfigure={() => openAgentConfig(w.id)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </div>
