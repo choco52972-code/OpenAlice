@@ -1,25 +1,26 @@
-import { Bell, Notebook } from 'lucide-react'
+import { Bell, HelpCircle, Notebook } from 'lucide-react'
 import { useChannels } from '../contexts/ChannelsContext'
 import { useWorkspace } from '../tabs/store'
 import { getFocusedTab } from '../tabs/types'
 import { useUnreadNotificationsCount } from '../live/notifications-read'
 import { ChatChannelList } from './ChatChannelList'
+import { ChatWorkspaceSection } from './workspace/ChatWorkspaceSection'
 import { SidebarRow } from './SidebarRow'
 
 /**
- * Connects ChatChannelList to ChannelsContext + the workspace store.
+ * Chat activity sidebar. Two conceptual sections:
  *
- * Layout reflects the framing of "Chat" as the catch-all activity for
- * interactions with Alice — not strictly chat:
+ *   - **Workspace chat** (recommended) — chat-template workspaces, each
+ *     wrapping a native CLI session (claude / codex / shell). Native
+ *     prompt cache + native frontend; the path most users should default
+ *     to. See README "Two kinds of chat".
+ *   - **Traditional chat** — the original /chat channels backed by
+ *     OpenAlice's ChatHook. Required for connectors (Telegram / MCP Ask
+ *     / webhook) which have no PTY to host a CLI in.
  *
- *   - Notifications  (inbound system pushes; unread badge)
- *   - Diary          (Alice's first-person output stream — read-only)
- *   ─────
- *   - Channels       (the chat conversations the user opens)
- *
- * The two upper rows are "Alice surfaces"; the channel list is "user
- * actions". They share this sidebar because the unifying mental model
- * is "everything Alice-shaped" rather than "places to type messages".
+ * Above both: Notifications + Diary — system-push surfaces that share
+ * this sidebar because the unifying mental model is "everything
+ * Alice-shaped".
  *
  * Active row tracking is derived from the focused tab — switching tabs
  * naturally shifts the highlight without bespoke wiring.
@@ -69,17 +70,40 @@ export function ChatChannelListContainer() {
         />
       </div>
 
-      <div className="mt-2 px-3 text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
-        Channels
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 mt-0.5">
-        <ChatChannelList
-          channels={channels}
-          activeChannel={focusedChannelId}
-          onSelect={(id) => openOrFocus({ kind: 'chat', params: { channelId: id } })}
-          onEdit={openEditDialog}
-          onDelete={deleteChannel}
-        />
+      <div className="flex-1 overflow-y-auto min-h-0 mt-2">
+        <div className="px-3 flex items-baseline gap-2">
+          <h3 className="text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
+            Workspace chat
+          </h3>
+          <span className="text-[10px] text-text-muted/50">recommended</span>
+        </div>
+        <div className="mt-0.5 mb-3">
+          <ChatWorkspaceSection />
+        </div>
+
+        <div className="px-3 mt-1 text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
+          Traditional
+        </div>
+        <div className="mt-0.5">
+          <ChatChannelList
+            channels={channels}
+            activeChannel={focusedChannelId}
+            onSelect={(id) => openOrFocus({ kind: 'chat', params: { channelId: id } })}
+            onEdit={openEditDialog}
+            onDelete={deleteChannel}
+          />
+        </div>
+
+        <a
+          href="https://github.com/TraderAlice/OpenAlice#two-kinds-of-chat"
+          target="_blank"
+          rel="noreferrer"
+          className="mx-3 my-3 flex items-center gap-1.5 text-[11px] text-text-muted/70 hover:text-text transition-colors"
+          title="Open README — Two kinds of chat"
+        >
+          <HelpCircle size={11} strokeWidth={2} aria-hidden="true" />
+          <span>Why two kinds of chat?</span>
+        </a>
       </div>
     </div>
   )

@@ -14,7 +14,7 @@ import {
 const TAG_HINT = 'a-z, 0-9, "-", "_", up to 33 chars';
 const TAG_RE = /^[a-z0-9][a-z0-9_-]{0,32}$/;
 
-interface Selection {
+export interface Selection {
   readonly wsId: string;
   readonly sessionId: string | null;
 }
@@ -219,7 +219,7 @@ export function Sidebar(props: SidebarProps): ReactElement {
   );
 }
 
-interface WorkspaceRowProps {
+export interface WorkspaceRowProps {
   readonly workspace: Workspace;
   readonly agents: readonly AgentInfo[];
   readonly selection: Selection | null;
@@ -264,7 +264,7 @@ function AgentBadgeGlyph({ agentId }: { agentId: string }): ReactElement {
   return <span aria-hidden="true">{agentPrefix(agentId)}</span>;
 }
 
-function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
+export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   const w = props.workspace;
   const isSelected = props.selection?.wsId === w.id && props.selection.sessionId === null;
   const hasRunning = w.sessions.some((s) => s.state === 'running');
