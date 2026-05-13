@@ -400,14 +400,16 @@ export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   );
 }
 
-function SessionRow(props: {
+export interface SessionRowProps {
   session: SessionRecord;
   isActive: boolean;
   onSelect: () => void;
   onPause: () => void;
   onResume: () => void;
   onDelete: () => void;
-}): ReactElement {
+}
+
+export function SessionRow(props: SessionRowProps): ReactElement {
   const s = props.session;
   const isPaused = s.state === 'paused';
   const tidShort = s.agentSessionId ? s.agentSessionId.slice(0, 8) : null;

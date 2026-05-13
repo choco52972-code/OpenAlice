@@ -70,18 +70,10 @@ export function ChatChannelListContainer() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 mt-2">
-        <div className="px-3 flex items-baseline gap-2">
-          <h3 className="text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
-            Workspace chat
-          </h3>
-          <span className="text-[10px] text-text-muted/50">recommended</span>
-        </div>
-        <div className="mt-0.5 mb-3">
-          <ChatWorkspaceSection />
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <ChatWorkspaceSection />
 
-        <div className="px-3 mt-1 text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
+        <div className="px-3 mt-3 text-[10px] font-medium text-text-muted/60 uppercase tracking-wider">
           Traditional
         </div>
         <div className="mt-0.5">
