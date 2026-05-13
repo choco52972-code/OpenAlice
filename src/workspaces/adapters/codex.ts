@@ -24,16 +24,28 @@ import type { BootstrapContext, CliAdapter, SpawnContext } from '../cli-adapter.
  *   pre-writes that entry so the launcher's spawn doesn't stall on the
  *   prompt.
  *
- * AI provider config: each workspace owns its own `.codex/` (we set
- * `CODEX_HOME=<cwd>/.codex` via `composeEnv` below). The workspace's
- * `config.toml` carries the OpenAlice MCP server entry + any
- * UI-configured `[model_providers.*]` blocks; `auth.json` starts as a
- * symlink to `~/.codex/auth.json` (graceful fallback to global login)
- * and gets replaced by the UI with a real file when the user picks a
- * workspace-specific provider. The MCP-flag translation that the
- * launcher originally did via `mcpJsonToCodexFlags` is gone — codex
- * reads MCP entries directly from the workspace's `config.toml` now.
+ * AI provider model — two modes, mutually exclusive:
+ *
+ *   1. **Default (no override).** Workspace has no `.codex/` directory.
+ *      Adapter doesn't set `CODEX_HOME`. Codex reads the user's global
+ *      `~/.codex/auth.json` + `~/.codex/config.toml` — exactly what a
+ *      vanilla `codex` invocation in any project does. The OpenAlice MCP
+ *      server is wired via the per-invocation `-c mcp_servers.openalice.url=...`
+ *      flag in `composeCommand` below, so MCP is visible without
+ *      polluting the user's global config.
+ *
+ *   2. **Override (user-configured via OpenAlice UI).** Workspace has its
+ *      own `.codex/{config.toml, env.json[, auth.json]}`. Adapter sets
+ *      `CODEX_HOME=<cwd>/.codex`. Codex reads workspace files only,
+ *      isolated from global state.
+ *
+ * No symlinks, no global-fallback inheritance. The `-c` flag is OpenAlice's
+ * "local MCP registration" — analogous to claude's `.mcp.json` cwd
+ * discovery, but driven via codex's CLI override flag since codex has no
+ * cwd-MCP convention of its own.
  */
+const OPENALICE_MCP_URL_DEFAULT = 'http://127.0.0.1:3001/mcp';
+
 export const codexAdapter: CliAdapter = {
   id: 'codex',
   displayName: 'Codex',
@@ -45,41 +57,40 @@ export const codexAdapter: CliAdapter = {
     transcriptDiscovery: 'none',
   },
 
+  /**
+   * Always prepends `-c mcp_servers.openalice.url="..."` so OpenAlice MCP
+   * is visible per-spawn without writing to `~/.codex/config.toml`. The
+   * flag overrides any same-key entry in the read config.toml (verified
+   * empirically), and adds a new key when none exists — safe in both
+   * default and override modes.
+   */
   composeCommand(_base: readonly string[], ctx: SpawnContext): readonly string[] {
-    const head = ['codex'];
+    const mcpUrl = process.env['OPENALICE_MCP_URL'] ?? OPENALICE_MCP_URL_DEFAULT;
+    const head = ['codex', '-c', `mcp_servers.openalice.url="${mcpUrl}"`];
     if (ctx.resume === undefined) return head;
     if (ctx.resume === 'last') return [...head, 'resume', '--last'];
     return [...head, 'resume', ctx.resume.sessionId];
   },
 
   /**
-   * Point codex at the workspace's own `.codex/` and inject any
-   * UI-configured env vars (api keys named by `[model_providers.X].env_key`
-   * in the workspace's `config.toml`).
+   * Set `CODEX_HOME` only when workspace has its own `.codex/` directory
+   * (override mode). Otherwise codex falls back to its own `~/.codex/`,
+   * which is its normal behavior in any uninvolved project. The "reset
+   * to default" UI action deletes the entire `.codex/` directory so the
+   * adapter naturally falls back here.
    *
-   * Defensive: only set `CODEX_HOME` when `<cwd>/.codex/auth.json` exists.
-   * Codex *crashes* ("Codex requires a login") if `CODEX_HOME` points at a
-   * dir without `auth.json`. Workspaces created by the current bootstrap
-   * always have it (real file or symlink to `~/.codex/auth.json`); legacy
-   * workspaces from before this change don't — those silently fall back
-   * to the global `~/.codex/` and lose workspace-MCP wiring until
-   * recreated. That's the migration story.
-   *
-   * `.codex/env.json` is the workspace's per-CLI env contribution. Codex
-   * has no notion of "literal api key in config" — its `env_key` field
-   * indirects through an env var. The OpenAlice UI writes the user's
-   * chosen key into `env.json` (e.g. `{"OPENALICE_WORKSPACE_KEY":"sk-..."}`)
-   * and the adapter exports those at spawn so codex's `env_key` lookup
-   * resolves. This is the one place we DO bridge a file → env (because
-   * codex requires env), but the source of truth is still the workspace
-   * file, not OpenAlice's internal state.
+   * `.codex/env.json` is OpenAlice's per-workspace key bridge. Codex's
+   * `[model_providers.X].env_key` field indirects through an env var; the
+   * UI writes the chosen key into `env.json` and the adapter exports it
+   * at spawn so codex's `env_key` lookup resolves. This is the only place
+   * we bridge file → env, and the source of truth is still the workspace
+   * file (not OpenAlice's internal state).
    */
   composeEnv(ctx: SpawnContext): Record<string, string> {
     const result: Record<string, string> = {};
     const workspaceCodex = join(ctx.cwd, '.codex');
-    if (existsSync(join(workspaceCodex, 'auth.json'))) {
-      result['CODEX_HOME'] = workspaceCodex;
-    }
+    if (!existsSync(workspaceCodex)) return result;
+    result['CODEX_HOME'] = workspaceCodex;
     const envFile = join(workspaceCodex, 'env.json');
     if (existsSync(envFile)) {
       try {

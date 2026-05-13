@@ -73,16 +73,12 @@ cd "$OUT_DIR"
 # 2. autoresearch branch from whatever master/main the source points at.
 git checkout -b "autoresearch/$TAG" >/dev/null
 
-# ── Codex workspace skeleton + agent-config excludes ─────────────────────
-# Mirror the chat template's setup so codex's CODEX_HOME=$cwd/.codex works
-# and the UI-saved secrets never leak to upstream Auto-Quant pushes. See
-# chat/bootstrap.sh for the full rationale.
-mkdir -p .codex
-ln -sf "$HOME/.codex/auth.json" .codex/auth.json
-cat > .codex/config.toml <<'TOML'
-[mcp_servers.openalice]
-url = "${OPENALICE_MCP_URL:-http://127.0.0.1:3001/mcp}"
-TOML
+# ── Agent-config excludes ────────────────────────────────────────────────
+# Preemptive defense: if the user later configures workspace-specific AI
+# provider via the OpenAlice UI (writing `.claude/settings.local.json` /
+# `.codex/auth.json`), the per-clone exclude keeps those secrets out of any
+# push to upstream Auto-Quant. Claude itself auto-ignores its file; this
+# entry is defense-in-depth.
 {
   echo '.claude/settings.local.json'
   echo '.codex/auth.json'

@@ -8,8 +8,8 @@
 
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { resolve as resolvePath } from 'node:path';
+import { readFile, rm } from 'node:fs/promises';
+import { join, resolve as resolvePath } from 'node:path';
 
 import { listDir, PathTraversal, readWorkspaceFile, writeWorkspaceFile } from '../../workspaces/file-service.js';
 import { gitLog, gitStatus } from '../../workspaces/git-service.js';
@@ -546,8 +546,11 @@ async function readClaudeConfig(workspaceDir: string): Promise<ClaudeConfigShape
 async function writeClaudeConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
   const hasAny = cfg.baseUrl || cfg.apiKey || cfg.model;
   if (!hasAny) {
-    // Reset: empty settings.local.json so claude falls back to global.
-    await writeWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH, '{}\n');
+    // Reset: delete the settings file so claude falls back to its global
+    // OAuth / settings. We don't leave an empty `{}` behind — workspace
+    // files exist only when there's an actual override.
+    const filePath = join(workspaceDir, CLAUDE_SETTINGS_PATH);
+    await rm(filePath, { force: true });
     return;
   }
   const out: Record<string, unknown> = {};
@@ -598,37 +601,44 @@ async function readCodexConfig(workspaceDir: string): Promise<CodexConfigShape |
 }
 
 async function writeCodexConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
-  // Always preserve the MCP block (constant content, OpenAlice infrastructure).
-  // Provider block + top-level `model` / `model_provider` only when configured.
-  const mcpBlock =
-    '[mcp_servers.openalice]\n' +
-    'url = "${OPENALICE_MCP_URL:-http://127.0.0.1:3001/mcp}"\n';
-
   const hasProvider = !!(cfg.baseUrl || cfg.model);
-  let toml = mcpBlock;
-  if (hasProvider) {
+
+  if (!hasProvider) {
+    // Reset: tear down the workspace's entire `.codex/` directory. The
+    // adapter's `composeEnv` won't set `CODEX_HOME` when the directory is
+    // absent, so codex falls back to the user's global `~/.codex/`. We
+    // don't leave empty stubs behind — workspace files exist only when
+    // there's an actual override. Note: `CODEX_HOME` is exclusive (not a
+    // merge layer), so a half-empty `.codex/` would *shadow* the user's
+    // global login and break auth. Full teardown is the only safe reset.
+    const codexDir = join(workspaceDir, '.codex');
+    await rm(codexDir, { recursive: true, force: true });
+    return;
+  }
+
+  // Provider override. config.toml carries only model / model_provider /
+  // [model_providers.*] — the OpenAlice MCP server entry is wired per-spawn
+  // via the codex adapter's `-c mcp_servers.openalice.url=...` flag, so we
+  // don't repeat it here.
+  let toml = '';
+  if (cfg.model) toml += `model = ${tomlString(cfg.model)}\n`;
+  if (cfg.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
+  if (cfg.baseUrl) {
     toml += '\n';
-    if (cfg.model) toml += `model = ${tomlString(cfg.model)}\n`;
-    if (cfg.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
-    if (cfg.baseUrl) {
-      toml += '\n';
-      toml += `[model_providers.${CODEX_PROVIDER_NAME}]\n`;
-      toml += `name = "OpenAlice workspace provider"\n`;
-      toml += `base_url = ${tomlString(cfg.baseUrl)}\n`;
-      toml += `env_key = "${CODEX_KEY_ENV_NAME}"\n`;
-      toml += `wire_api = "${cfg.wireApi ?? 'chat'}"\n`;
-    }
+    toml += `[model_providers.${CODEX_PROVIDER_NAME}]\n`;
+    toml += `name = "OpenAlice workspace provider"\n`;
+    toml += `base_url = ${tomlString(cfg.baseUrl)}\n`;
+    toml += `env_key = "${CODEX_KEY_ENV_NAME}"\n`;
+    toml += `wire_api = "${cfg.wireApi ?? 'chat'}"\n`;
   }
   await writeWorkspaceFile(workspaceDir, CODEX_CONFIG_PATH, toml);
 
   // env.json: holds the per-workspace API key codex picks up via env_key.
-  // Adapter's composeEnv reads this and exports at spawn. Empty / missing
-  // file = no workspace key (codex falls back to ~/.codex/auth.json OAuth).
+  // Adapter's composeEnv reads this and exports at spawn.
   if (cfg.apiKey) {
     const envObj: Record<string, string> = { [CODEX_KEY_ENV_NAME]: cfg.apiKey };
     await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, JSON.stringify(envObj, null, 2) + '\n');
   } else {
-    // Reset key: write empty object so the adapter sees nothing to inject.
     await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, '{}\n');
   }
 }
