@@ -130,6 +130,41 @@ graph TB
 
 **AI Provider** — The AI backend that powers Alice. Claude (via Agent SDK, supports OAuth login or API key) or Vercel AI SDK (Anthropic, OpenAI, Google). Switchable at runtime — no restart needed.
 
+## Two kinds of chat
+
+OpenAlice ships two paths for chatting with Alice. They have very different performance characteristics, and picking the right one matters more than it looks.
+
+### Workspace chat (recommended when available)
+
+A chat-type **workspace** is a directory + git repo + a persistent terminal session running the native CLI of your chosen agent (`claude`, `codex`, or `shell`). The CLI process handles all model interaction, prompt caching, and rendering — OpenAlice's job is to plumb its MCP server into the workspace and surface the terminal in the UI.
+
+- **Native prompt cache.** Claude Code, Codex, and the other agent CLIs implement vendor-specific cache control we can't replicate. On a long conversation this is often a 10× cost reduction.
+- **Native frontend.** TUI rendering, syntax highlighting, diff display — the CLI vendor has already tuned these for their model.
+- **Full tool surface.** The CLI sees the workspace's local files plus OpenAlice's MCP tools. No "greatest-common-denominator" trimming.
+- **Stable.** No `ChatHook` protocol layer between you and the model.
+
+The only requirement: the CLI binary has to be installed on the host running OpenAlice.
+
+### Traditional chat
+
+The original `/chat` page. OpenAlice's `ChatHook` calls the agent SDK (Vercel AI SDK or Anthropic Agent SDK) directly, normalizes events through its own layer, and renders them.
+
+- **No shell required.** Works in any environment OpenAlice runs in.
+- **Reachable by connectors.** Telegram, MCP Ask, and webhook-pushed messages all land here because those surfaces have no terminal to host a CLI in.
+
+The cost: token usage is high (cache control is OpenAlice's responsibility and still incomplete), capability is constrained (each new CLI feature has to be re-implemented at the `ChatHook` layer), and `ChatHook` itself is still maturing.
+
+### Which one should I use?
+
+| Scenario | Use |
+| --- | --- |
+| Interactive UI chats with Alice on this machine | **Workspace chat** |
+| Connector-pushed messages (Telegram bot, webhook callbacks) | Traditional chat |
+| Long sessions where token cost matters | **Workspace chat** |
+| Environment with no shell / no CLI installed | Traditional chat |
+
+Today the connectors are wired to traditional chat. If shell-bridged connectors arrive later, they can opt into workspace chat too — the two paths are designed to coexist, not replace each other.
+
 ## Quick Start
 
 Prerequisites: Node.js 22+, pnpm 10+, [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.

@@ -7,6 +7,20 @@ import type { Logger } from './logger.js';
 export interface TemplateMeta {
   readonly name: string;
   readonly description?: string;
+  /**
+   * Human-readable name surfaced in the UI (dashboard section headers,
+   * etc.). Sourced from `template.json`'s `displayName` key. Falls back
+   * to a humanized form of `name` on the client when missing.
+   */
+  readonly displayName?: string;
+  /**
+   * Sort key for grouping workspaces by template type in the dashboard.
+   * Lower = earlier. Sourced from `template.json`'s `groupOrder` key.
+   * Templates without a declared `groupOrder` sort after declared ones,
+   * by name. New template types just need to add this field to their
+   * `template.json` — no frontend code change required.
+   */
+  readonly groupOrder?: number;
   /** Absolute path to the template's `bootstrap.sh`. */
   readonly bootstrapScript: string;
   /** Absolute path to the template's `files/` directory (may not exist). */
@@ -55,6 +69,8 @@ export class TemplateRegistry {
       const meta: TemplateMeta = {
         name,
         ...(tplMeta.description !== undefined ? { description: tplMeta.description } : {}),
+        ...(tplMeta.displayName !== undefined ? { displayName: tplMeta.displayName } : {}),
+        ...(tplMeta.groupOrder !== undefined ? { groupOrder: tplMeta.groupOrder } : {}),
         bootstrapScript,
         filesDir,
         defaultAgents: tplMeta.defaultAgents,
@@ -96,6 +112,8 @@ export class TemplateRegistry {
 
 interface ParsedTemplateMeta {
   readonly description?: string;
+  readonly displayName?: string;
+  readonly groupOrder?: number;
   readonly defaultAgents: readonly string[];
 }
 
@@ -112,11 +130,18 @@ async function readTemplateMeta(path: string): Promise<ParsedTemplateMeta> {
     if (typeof parsed !== 'object' || parsed === null) return fallback;
     const obj = parsed as Record<string, unknown>;
     const description = typeof obj['description'] === 'string' ? obj['description'] : undefined;
+    const displayName = typeof obj['displayName'] === 'string' ? obj['displayName'] : undefined;
+    const groupOrder =
+      typeof obj['groupOrder'] === 'number' && Number.isFinite(obj['groupOrder'])
+        ? obj['groupOrder']
+        : undefined;
     const defaultAgents = Array.isArray(obj['defaultAgents'])
       ? obj['defaultAgents'].filter((a): a is string => typeof a === 'string')
       : null;
     return {
       ...(description !== undefined ? { description } : {}),
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(groupOrder !== undefined ? { groupOrder } : {}),
       defaultAgents: defaultAgents && defaultAgents.length > 0 ? defaultAgents : ['claude'],
     };
   } catch {

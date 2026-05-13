@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import type { ChannelListItem } from '../api/channels'
+import type { Workspace } from '../components/workspace/api'
 import type { ViewKind, ViewSpec } from './types'
 
 import { ChatPage } from '../pages/ChatPage'
@@ -33,6 +34,9 @@ import { WorkspacePage } from '../pages/WorkspacePage'
 
 export interface TitleCtx {
   channels: ChannelListItem[]
+  /** Workspaces list, threaded from WorkspacesContext. Used by workspaceModule
+   *  to render tab titles as `<tag> · <sessionName>` instead of opaque UUIDs. */
+  workspaces?: readonly Workspace[]
 }
 
 interface ViewProps<K extends ViewKind> {
@@ -193,10 +197,14 @@ const workspaceListModule: ViewModule<'workspace-list'> = {
 
 const workspaceModule: ViewModule<'workspace'> = {
   kind: 'workspace',
-  title: (spec) => {
-    const ws = spec.params.wsId.slice(0, 8)
+  title: (spec, ctx) => {
+    const ws = ctx.workspaces?.find((w) => w.id === spec.params.wsId)
+    const tag = ws?.tag ?? spec.params.wsId.slice(0, 8)
     const sid = spec.params.sessionId
-    return sid ? `${ws} · ${sid.slice(0, 6)}` : ws
+    if (!sid) return tag
+    const session = ws?.sessions.find((s) => s.id === sid)
+    const name = session?.name ?? sid.slice(0, 6)
+    return `${tag} · ${name}`
   },
   toUrl: (spec) => {
     const base = `/workspaces/${encodeURIComponent(spec.params.wsId)}`

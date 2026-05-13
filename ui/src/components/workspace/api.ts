@@ -18,6 +18,15 @@ export interface Workspace {
    * pane state.
    */
   readonly sessions: readonly SessionRecord[];
+  /**
+   * Whether the workspace has UI-saved AI provider overrides for each
+   * agent. claude = `.claude/settings.local.json` exists; codex =
+   * `.codex/` directory exists. Surfaced in the Overview dashboard.
+   */
+  readonly agentOverride?: {
+    readonly claude: boolean;
+    readonly codex: boolean;
+  };
 }
 
 export interface CreateError {
@@ -70,6 +79,11 @@ export async function createWorkspace(
 export interface TemplateInfo {
   readonly name: string;
   readonly description?: string;
+  /** Human-readable name for UI surfaces (dashboard section headers, etc.). */
+  readonly displayName?: string;
+  /** Sort key for dashboard grouping. Lower = earlier. Templates without
+   *  a declared `groupOrder` sort after declared ones, by name. */
+  readonly groupOrder?: number;
   readonly defaultAgents: readonly string[];
 }
 

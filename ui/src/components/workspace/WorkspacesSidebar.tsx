@@ -22,6 +22,7 @@ export function WorkspacesSidebar() {
         sessionId: focused.params.sessionId ?? null,
       }
     : null
+  const overviewActive = focused?.kind === 'workspace-list'
 
   return (
     <div className="workspaces-root workspaces-sidebar-frame">
@@ -44,6 +45,8 @@ export function WorkspacesSidebar() {
         onDeleteSession={(wsId, id) => void ctx.deleteSession(wsId, id)}
         onChanged={() => void ctx.refresh()}
         onConfigureWorkspace={(wsId) => ctx.openAgentConfig(wsId)}
+        onOpenOverview={() => openOrFocus({ kind: 'workspace-list', params: {} })}
+        overviewActive={overviewActive}
       />
     </div>
   )

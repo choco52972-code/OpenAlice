@@ -8,6 +8,7 @@
  * Lifecycle: `createWorkspaceService()` at plugin start; `dispose()` at stop.
  */
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { claudeAdapter } from './adapters/claude.js';
@@ -172,7 +173,14 @@ export async function createWorkspaceService(): Promise<WorkspaceService> {
         startedAt: liveEntry?.startedAt ?? null,
       };
     });
-    return { ...w, sessions };
+    // Workspace AI provider override signals — read by the Overview
+    // dashboard for the "⚙ Workspace override" footer per card. Cheap
+    // (single statSync each) so it's safe on the regular list poll.
+    const agentOverride = {
+      claude: existsSync(join(w.dir, '.claude', 'settings.local.json')),
+      codex: existsSync(join(w.dir, '.codex')),
+    };
+    return { ...w, sessions, agentOverride };
   };
 
   const dispose = async (reason: string): Promise<void> => {

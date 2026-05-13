@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
+import { Cpu, LayoutGrid, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
 
 import {
   createWorkspace,
@@ -13,7 +14,7 @@ import {
 const TAG_HINT = 'a-z, 0-9, "-", "_", up to 33 chars';
 const TAG_RE = /^[a-z0-9][a-z0-9_-]{0,32}$/;
 
-interface Selection {
+export interface Selection {
   readonly wsId: string;
   readonly sessionId: string | null;
 }
@@ -38,6 +39,10 @@ export interface SidebarProps {
   readonly onChanged: () => void;
   /** Optional: open the per-workspace AI-provider config modal. */
   readonly onConfigureWorkspace?: (wsId: string) => void;
+  /** Open the Workspaces Overview dashboard tab (card view of all workspaces). */
+  readonly onOpenOverview?: () => void;
+  /** True when the Workspaces Overview tab is currently focused — highlights the pinned row. */
+  readonly overviewActive?: boolean;
 }
 
 export function Sidebar(props: SidebarProps): ReactElement {
@@ -176,6 +181,19 @@ export function Sidebar(props: SidebarProps): ReactElement {
       {createError && <div className="sidebar-error">{createError}</div>}
 
       <ul className="sidebar-list">
+        {props.onOpenOverview && (
+          <li className="sidebar-overview-row">
+            <button
+              type="button"
+              className={`sidebar-overview-btn${props.overviewActive ? ' is-active' : ''}`}
+              onClick={props.onOpenOverview}
+              title="Card-based dashboard of all workspaces"
+            >
+              <LayoutGrid size={13} strokeWidth={2.25} aria-hidden="true" />
+              <span>Overview</span>
+            </button>
+          </li>
+        )}
         {props.workspaces.length === 0 && !props.listError && (
           <li className="sidebar-empty">no workspaces yet</li>
         )}
@@ -201,7 +219,7 @@ export function Sidebar(props: SidebarProps): ReactElement {
   );
 }
 
-interface WorkspaceRowProps {
+export interface WorkspaceRowProps {
   readonly workspace: Workspace;
   readonly agents: readonly AgentInfo[];
   readonly selection: Selection | null;
@@ -227,7 +245,26 @@ function agentPrefix(id: string): string {
   return id[0] ?? '?';
 }
 
-function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
+/**
+ * Glyph for a given agent SDK. Icon-first so users don't have to learn the
+ * `c1` / `x1` / `sh1` naming convention — at-a-glance they see which CLI
+ * the session is running. Unknown adapter id falls back to its first
+ * letter (text), keeping the badge non-empty even for future adapters
+ * before they get an icon.
+ */
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  claude: Sparkles,
+  codex: Cpu,
+  shell: Terminal,
+};
+
+function AgentBadgeGlyph({ agentId }: { agentId: string }): ReactElement {
+  const Icon = AGENT_ICONS[agentId];
+  if (Icon) return <Icon size={11} strokeWidth={2.25} aria-hidden="true" />;
+  return <span aria-hidden="true">{agentPrefix(agentId)}</span>;
+}
+
+export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   const w = props.workspace;
   const isSelected = props.selection?.wsId === w.id && props.selection.sessionId === null;
   const hasRunning = w.sessions.some((s) => s.state === 'running');
@@ -281,6 +318,7 @@ function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
           type="button"
           className="sidebar-row-main"
           onClick={() => props.onSelectWorkspace(w.id)}
+          title={w.tag}
         >
           <span
             className="sidebar-status-dot"
@@ -362,14 +400,16 @@ function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   );
 }
 
-function SessionRow(props: {
+export interface SessionRowProps {
   session: SessionRecord;
   isActive: boolean;
   onSelect: () => void;
   onPause: () => void;
   onResume: () => void;
   onDelete: () => void;
-}): ReactElement {
+}
+
+export function SessionRow(props: SessionRowProps): ReactElement {
   const s = props.session;
   const isPaused = s.state === 'paused';
   const tidShort = s.agentSessionId ? s.agentSessionId.slice(0, 8) : null;
@@ -385,7 +425,7 @@ function SessionRow(props: {
     >
       <button type="button" className="sidebar-session-main" onClick={props.onSelect} title={title}>
         <span className={`sidebar-agent-badge is-${s.agent} ${isPaused ? 'is-paused' : ''}`}>
-          {agentPrefix(s.agent)}
+          <AgentBadgeGlyph agentId={s.agent} />
         </span>
         <span className="sidebar-session-name">{s.name}</span>
         {tidShort && <span className="sidebar-session-tid">{tidShort}</span>}

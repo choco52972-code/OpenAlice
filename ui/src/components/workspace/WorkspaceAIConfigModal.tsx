@@ -36,7 +36,11 @@ interface FormState {
   wireApi: 'chat' | 'responses'
 }
 
-const EMPTY_FORM: FormState = { baseUrl: '', apiKey: '', model: '', wireApi: 'chat' }
+// codex-cli ≥ 0.130 dropped the legacy `wire_api = "chat"` shape; "responses"
+// is now the only supported value (see github.com/openai/codex/discussions/7782).
+// We still surface "chat" as a labelled-deprecated option so users on older
+// codex builds aren't surprised, but the default is "responses".
+const EMPTY_FORM: FormState = { baseUrl: '', apiKey: '', model: '', wireApi: 'responses' }
 
 function configToForm(cfg: AgentConfig | null): FormState {
   if (!cfg) return EMPTY_FORM
@@ -44,7 +48,7 @@ function configToForm(cfg: AgentConfig | null): FormState {
     baseUrl: cfg.baseUrl ?? '',
     apiKey: cfg.apiKey ?? '',
     model: cfg.model ?? '',
-    wireApi: (cfg.wireApi as 'chat' | 'responses') ?? 'chat',
+    wireApi: (cfg.wireApi as 'chat' | 'responses') ?? 'responses',
   }
 }
 
@@ -268,8 +272,8 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
                 onChange={(e) => setForm({ ...form, wireApi: e.target.value as 'chat' | 'responses' })}
                 className={inputClass}
               >
-                <option value="chat">chat (OpenAI Chat Completions — most common)</option>
-                <option value="responses">responses (OpenAI Responses API)</option>
+                <option value="responses">responses (OpenAI Responses API — required by codex ≥ 0.130)</option>
+                <option value="chat">chat (legacy, OpenAI Chat Completions — removed in codex 0.130+)</option>
               </select>
             </div>
           )}
