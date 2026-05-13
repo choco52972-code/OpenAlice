@@ -27,6 +27,7 @@ import {
 
 import '../components/workspace/workspaces.css'
 
+import { WorkspaceAIConfigModal } from '../components/workspace/WorkspaceAIConfigModal'
 import {
   deleteSession as apiDeleteSession,
   listAgents,
@@ -59,6 +60,8 @@ interface WorkspacesContextValue {
   pauseSession(wsId: string, sessionId: string): Promise<void>
   resumeSession(wsId: string, sessionId: string): Promise<void>
   deleteSession(wsId: string, sessionId: string): Promise<void>
+  /** Open the per-workspace AI-provider config modal for `wsId`. */
+  openAgentConfig(wsId: string): void
 }
 
 const WorkspacesContext = createContext<WorkspacesContextValue | null>(null)
@@ -73,6 +76,11 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   // "every workspace was just deleted" and a deep-linked workspace URL
   // gets its freshly-opened tab closed before the first poll lands.
   const [hasLoaded, setHasLoaded] = useState(false)
+  // AI-provider config modal target. Lifted to context so the sidebar
+  // gear button (no workspace tab needed) and the WorkspacePage header
+  // button share one modal instance — and the modal survives activity
+  // switches (rendered here, not inside an activity-scoped component).
+  const [configuringWsId, setConfiguringWsId] = useState<string | null>(null)
 
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
   const closeTab = useWorkspace((s) => s.closeTab)
@@ -227,9 +235,16 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
         pauseSession,
         resumeSession,
         deleteSession,
+        openAgentConfig: (wsId: string) => setConfiguringWsId(wsId),
       }}
     >
       {children}
+      {configuringWsId !== null && (
+        <WorkspaceAIConfigModal
+          wsId={configuringWsId}
+          onClose={() => setConfiguringWsId(null)}
+        />
+      )}
     </WorkspacesContext.Provider>
   )
 }

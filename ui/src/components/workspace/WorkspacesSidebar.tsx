@@ -43,6 +43,7 @@ export function WorkspacesSidebar() {
         onResumeSession={(wsId, id) => void ctx.resumeSession(wsId, id)}
         onDeleteSession={(wsId, id) => void ctx.deleteSession(wsId, id)}
         onChanged={() => void ctx.refresh()}
+        onConfigureWorkspace={(wsId) => ctx.openAgentConfig(wsId)}
       />
     </div>
   )

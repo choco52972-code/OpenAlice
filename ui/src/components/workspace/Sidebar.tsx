@@ -36,6 +36,8 @@ export interface SidebarProps {
   readonly onResumeSession: (wsId: string, sessionId: string) => void;
   readonly onDeleteSession: (wsId: string, sessionId: string) => void;
   readonly onChanged: () => void;
+  /** Optional: open the per-workspace AI-provider config modal. */
+  readonly onConfigureWorkspace?: (wsId: string) => void;
 }
 
 export function Sidebar(props: SidebarProps): ReactElement {
@@ -191,6 +193,7 @@ export function Sidebar(props: SidebarProps): ReactElement {
             onResumeSession={props.onResumeSession}
             onDeleteSession={props.onDeleteSession}
             onDelete={onDelete}
+            onConfigureWorkspace={props.onConfigureWorkspace}
           />
         ))}
       </ul>
@@ -209,6 +212,7 @@ interface WorkspaceRowProps {
   readonly onResumeSession: (wsId: string, sessionId: string) => void;
   readonly onDeleteSession: (wsId: string, sessionId: string) => void;
   readonly onDelete: (id: string) => Promise<void>;
+  readonly onConfigureWorkspace?: (wsId: string) => void;
 }
 
 function agentLabel(id: string, agents: readonly AgentInfo[]): string {
@@ -318,6 +322,16 @@ function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
               </ul>
             )}
           </div>
+        )}
+        {props.onConfigureWorkspace && (
+          <button
+            type="button"
+            className="sidebar-action sidebar-action-config"
+            title="configure AI provider for this workspace"
+            onClick={() => props.onConfigureWorkspace?.(w.id)}
+          >
+            ⚙
+          </button>
         )}
         <button
           type="button"

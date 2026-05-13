@@ -16,12 +16,11 @@
  * keeps running on the server. Use the sidebar's × to actually delete.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import '@xterm/xterm/css/xterm.css'
 
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { WorkspaceView } from '../components/workspace/WorkspaceView'
-import { WorkspaceAIConfigModal } from '../components/workspace/WorkspaceAIConfigModal'
 import type { KeyMap } from '../components/workspace/Terminal'
 import type { ViewSpec } from '../tabs/types'
 
@@ -38,7 +37,6 @@ export function WorkspacePage({ spec, visible }: Props) {
   const ctx = useWorkspaces()
   const wsId = spec.params.wsId
   const sessionId = spec.params.sessionId ?? null
-  const [aiConfigOpen, setAiConfigOpen] = useState(false)
 
   const workspace = ctx.workspaces.find((w) => w.id === wsId)
   const sessions = workspace?.sessions ?? []
@@ -84,7 +82,7 @@ export function WorkspacePage({ spec, visible }: Props) {
         <span className="text-[12px] text-text-muted font-medium">{workspace.tag}</span>
         <button
           type="button"
-          onClick={() => setAiConfigOpen(true)}
+          onClick={() => ctx.openAgentConfig(wsId)}
           className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors"
           title="Configure this workspace's AI provider (claude / codex)"
         >
@@ -113,10 +111,6 @@ export function WorkspacePage({ spec, visible }: Props) {
           }}
         />
       </div>
-
-      {aiConfigOpen && (
-        <WorkspaceAIConfigModal wsId={wsId} onClose={() => setAiConfigOpen(false)} />
-      )}
     </div>
   )
 }
