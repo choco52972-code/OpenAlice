@@ -107,6 +107,39 @@ the item when done — git log is the history.
       third parties (Together, Groq, vLLM, LM Studio, Ollama) a
       proper light chat path. Same structural shape as the Anthropic
       one. ~3-4h.
+- [ ] **Profile + AI Provider model needs structural rethink.**
+      Surfaced 2026-05-13 during workspaces' per-workspace codex
+      override testing (commit `6b52853`). `ai-provider-manager.json`
+      profiles (Kimi/MiniMax/DeepSeek/Claude Pro) are **claude-shaped**
+      — each profile's `baseUrl` is the vendor's Anthropic-compat
+      endpoint (e.g. `https://api.moonshot.ai/anthropic`) and `model`
+      is the Anthropic-side model name. Applying the same profile to
+      codex via `WorkspaceAIConfigModal`'s shared Apply-from-profile
+      quick-pick silently produces invalid configs: codex speaks
+      OpenAI Responses shape, POSTs against an Anthropic endpoint →
+      `POST /anthropic/responses` → 404.
+
+      The shape mismatch isn't a quick-fix item — disabling
+      Apply-in-codex-tab or adding "no `/anthropic` in baseUrl"
+      sanity checks just covers one foot-gun each. "AI Provider"
+      today conflates four concepts that have started to diverge:
+      Anthropic-API endpoints, OpenAI-API endpoints, **vendor
+      identity** (Moonshot/DeepSeek/etc., one credential, multiple
+      endpoint shapes), and the `(baseUrl, model)` triple stored
+      per-profile. Each consumer (chat path / workspace claude /
+      workspace codex / future Anthropic-native / future
+      OpenAI-native) needs a different slice. Bolting more
+      `(baseUrl, apiKey, model)` triples onto the profile struct
+      keeps stacking the conflation.
+
+      Adjacent work that should design together (don't ship in
+      isolation): the **Native Anthropic / Native OpenAI provider**
+      TODOs above — their concrete client-side input shapes
+      clarify what profile dimensions actually need to exist. The
+      per-workspace override modal (just shipped) hits the same
+      foot-gun and would benefit from the redesigned profile model
+      directly. Land all three in one focused pass.
+
 - [ ] Unified config hot-reload. Right now every consumer of a config
       section has to solve "did the user edit this?" on its own —
       Telegram/MCP-Ask via `reconnectConnectors`, opentypebb via lazy
