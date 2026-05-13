@@ -243,6 +243,10 @@
   gap: 8px;
   padding: 6px 14px;
   flex: 1 1 auto;
+  /* min-width: 0 lets the .sidebar-tag child shrink below its intrinsic
+   * width so the text-overflow ellipsis kicks in. Without this, long tags
+   * push the row wider than the sidebar column and wrap or overflow. */
+  min-width: 0;
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -260,8 +264,14 @@
 
 .sidebar-tag {
   flex: 1 1 auto;
+  /* Required for ellipsis to work inside a flex parent (matches the
+   * min-width: 0 on .sidebar-row-main above). */
+  min-width: 0;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-meta {

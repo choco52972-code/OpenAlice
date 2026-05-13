@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
+import { Cpu, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
 
 import {
   createWorkspace,
@@ -227,6 +228,25 @@ function agentPrefix(id: string): string {
   return id[0] ?? '?';
 }
 
+/**
+ * Glyph for a given agent SDK. Icon-first so users don't have to learn the
+ * `c1` / `x1` / `sh1` naming convention — at-a-glance they see which CLI
+ * the session is running. Unknown adapter id falls back to its first
+ * letter (text), keeping the badge non-empty even for future adapters
+ * before they get an icon.
+ */
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  claude: Sparkles,
+  codex: Cpu,
+  shell: Terminal,
+};
+
+function AgentBadgeGlyph({ agentId }: { agentId: string }): ReactElement {
+  const Icon = AGENT_ICONS[agentId];
+  if (Icon) return <Icon size={11} strokeWidth={2.25} aria-hidden="true" />;
+  return <span aria-hidden="true">{agentPrefix(agentId)}</span>;
+}
+
 function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   const w = props.workspace;
   const isSelected = props.selection?.wsId === w.id && props.selection.sessionId === null;
@@ -281,6 +301,7 @@ function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
           type="button"
           className="sidebar-row-main"
           onClick={() => props.onSelectWorkspace(w.id)}
+          title={w.tag}
         >
           <span
             className="sidebar-status-dot"
@@ -385,7 +406,7 @@ function SessionRow(props: {
     >
       <button type="button" className="sidebar-session-main" onClick={props.onSelect} title={title}>
         <span className={`sidebar-agent-badge is-${s.agent} ${isPaused ? 'is-paused' : ''}`}>
-          {agentPrefix(s.agent)}
+          <AgentBadgeGlyph agentId={s.agent} />
         </span>
         <span className="sidebar-session-name">{s.name}</span>
         {tidShort && <span className="sidebar-session-tid">{tidShort}</span>}
