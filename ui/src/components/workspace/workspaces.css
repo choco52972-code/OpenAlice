@@ -222,6 +222,44 @@
   color: var(--fg-dim);
 }
 
+/* Pinned "Overview" row at the top of the workspaces list. Opens the
+ * dashboard view rather than a session — visually distinct (icon-led,
+ * slightly muted, no agent badges or session children) so users don't
+ * confuse it with a workspace. */
+.sidebar-overview-row {
+  list-style: none;
+  margin: 0 0 4px 0;
+  padding: 0;
+}
+.sidebar-overview-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.sidebar-overview-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+}
+.sidebar-overview-btn.is-active {
+  background: rgba(121, 192, 255, 0.08);
+  border-left-color: var(--accent);
+  color: var(--fg);
+}
+.sidebar-overview-btn > svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .sidebar-row {
   display: flex;
   align-items: stretch;

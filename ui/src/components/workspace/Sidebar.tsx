@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
-import { Cpu, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
+import { Cpu, LayoutGrid, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
 
 import {
   createWorkspace,
@@ -39,6 +39,10 @@ export interface SidebarProps {
   readonly onChanged: () => void;
   /** Optional: open the per-workspace AI-provider config modal. */
   readonly onConfigureWorkspace?: (wsId: string) => void;
+  /** Open the Workspaces Overview dashboard tab (card view of all workspaces). */
+  readonly onOpenOverview?: () => void;
+  /** True when the Workspaces Overview tab is currently focused — highlights the pinned row. */
+  readonly overviewActive?: boolean;
 }
 
 export function Sidebar(props: SidebarProps): ReactElement {
@@ -177,6 +181,19 @@ export function Sidebar(props: SidebarProps): ReactElement {
       {createError && <div className="sidebar-error">{createError}</div>}
 
       <ul className="sidebar-list">
+        {props.onOpenOverview && (
+          <li className="sidebar-overview-row">
+            <button
+              type="button"
+              className={`sidebar-overview-btn${props.overviewActive ? ' is-active' : ''}`}
+              onClick={props.onOpenOverview}
+              title="Card-based dashboard of all workspaces"
+            >
+              <LayoutGrid size={13} strokeWidth={2.25} aria-hidden="true" />
+              <span>Overview</span>
+            </button>
+          </li>
+        )}
         {props.workspaces.length === 0 && !props.listError && (
           <li className="sidebar-empty">no workspaces yet</li>
         )}
